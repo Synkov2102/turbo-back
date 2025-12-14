@@ -1,0 +1,570 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/avito-parser/parse": {
+      "post": {
+        "operationId": "AvitoParserController_parseAvitoAd",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить объявление с Avito и сохранить в базу данных",
+        "tags": [
+          "avito-parser"
+        ]
+      }
+    },
+    "/cars": {
+      "get": {
+        "operationId": "CarsController_getCars",
+        "parameters": [
+          {
+            "name": "brand",
+            "required": false,
+            "in": "query",
+            "description": "Бренд автомобиля",
+            "schema": {
+              "example": "Toyota",
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "required": false,
+            "in": "query",
+            "description": "Модель автомобиля",
+            "schema": {
+              "example": "Camry",
+              "type": "string"
+            }
+          },
+          {
+            "name": "minYear",
+            "required": false,
+            "in": "query",
+            "description": "Минимальный год выпуска",
+            "schema": {
+              "minimum": 1900,
+              "example": 2010,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxYear",
+            "required": false,
+            "in": "query",
+            "description": "Максимальный год выпуска",
+            "schema": {
+              "maximum": 2030,
+              "example": 2024,
+              "type": "number"
+            }
+          },
+          {
+            "name": "minPrice",
+            "required": false,
+            "in": "query",
+            "description": "Минимальная цена в рублях",
+            "schema": {
+              "minimum": 0,
+              "example": 500000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "required": false,
+            "in": "query",
+            "description": "Максимальная цена в рублях",
+            "schema": {
+              "minimum": 0,
+              "example": 5000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "description": "Город",
+            "schema": {
+              "example": "Москва",
+              "type": "string"
+            }
+          },
+          {
+            "name": "transmission",
+            "required": false,
+            "in": "query",
+            "description": "Тип трансмиссии",
+            "schema": {
+              "example": "AT",
+              "type": "string",
+              "enum": [
+                "AT",
+                "MT",
+                "AMT",
+                "CVT"
+              ]
+            }
+          },
+          {
+            "name": "minEngineVolume",
+            "required": false,
+            "in": "query",
+            "description": "Минимальный объем двигателя в литрах",
+            "schema": {
+              "minimum": 0,
+              "example": 1.5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxEngineVolume",
+            "required": false,
+            "in": "query",
+            "description": "Максимальный объем двигателя в литрах",
+            "schema": {
+              "minimum": 0,
+              "example": 5,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Номер страницы",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Количество элементов на странице",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список автомобилей с метаданными пагинации",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Получить список автомобилей с фильтрами и пагинацией",
+        "tags": [
+          "cars"
+        ]
+      }
+    },
+    "/cars/filters/options": {
+      "get": {
+        "operationId": "CarsController_getFilterOptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Опции для фильтров (бренды, города, диапазоны цен и т.д.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilterOptionsDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Получить опции для фильтров",
+        "tags": [
+          "cars"
+        ]
+      }
+    },
+    "/cars/filters/models": {
+      "get": {
+        "operationId": "CarsController_getModelsByBrand",
+        "parameters": [
+          {
+            "name": "brand",
+            "required": false,
+            "in": "query",
+            "description": "Бренд автомобиля",
+            "schema": {
+              "example": "Toyota",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список моделей для указанного бренда",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Получить список моделей по бренду",
+        "tags": [
+          "cars"
+        ]
+      }
+    },
+    "/cars/{id}": {
+      "get": {
+        "operationId": "CarsController_getCarById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "ID автомобиля",
+            "schema": {
+              "example": "507f1f77bcf86cd799439011",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Информация об автомобиле",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Автомобиль не найден"
+          }
+        },
+        "summary": "Получить автомобиль по ID",
+        "tags": [
+          "cars"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Turbo Back API",
+    "description": "API для парсинга и работы с объявлениями об автомобилях",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "cars",
+      "description": "Операции с автомобилями"
+    },
+    {
+      "name": "avito-parser",
+      "description": "Парсинг объявлений с Avito"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "ParseAvitoDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL объявления на Avito",
+            "example": "https://www.avito.ru/moskva/avtomobili/toyota_camry_2020_1234567890"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "Car": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Название объявления",
+            "example": "Toyota Camry 2020"
+          },
+          "brand": {
+            "type": "string",
+            "description": "Бренд автомобиля",
+            "example": "Toyota"
+          },
+          "model": {
+            "type": "string",
+            "description": "Модель автомобиля",
+            "example": "Camry"
+          },
+          "year": {
+            "type": "number",
+            "description": "Год выпуска",
+            "example": 2020
+          },
+          "price": {
+            "type": "number",
+            "description": "Цена в рублях",
+            "example": 1500000
+          },
+          "mileage": {
+            "type": "number",
+            "description": "Пробег в километрах",
+            "example": 50000
+          },
+          "city": {
+            "type": "string",
+            "description": "Город",
+            "example": "Москва"
+          },
+          "transmission": {
+            "type": "string",
+            "description": "Тип трансмиссии",
+            "example": "AT",
+            "enum": [
+              "AT",
+              "MT",
+              "AMT",
+              "CVT"
+            ]
+          },
+          "engineVolume": {
+            "type": "number",
+            "description": "Объем двигателя в литрах",
+            "example": 2.5
+          },
+          "description": {
+            "type": "string",
+            "description": "Описание автомобиля"
+          },
+          "url": {
+            "type": "string",
+            "description": "URL объявления на Avito",
+            "example": "https://www.avito.ru/..."
+          },
+          "images": {
+            "description": "Массив URL изображений",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Дата создания записи",
+            "example": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "createdAt"
+        ]
+      },
+      "PaginationMetaDto": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number",
+            "description": "Текущая страница",
+            "example": 1
+          },
+          "limit": {
+            "type": "number",
+            "description": "Количество элементов на странице",
+            "example": 10
+          },
+          "total": {
+            "type": "number",
+            "description": "Общее количество элементов",
+            "example": 150
+          },
+          "totalPages": {
+            "type": "number",
+            "description": "Общее количество страниц",
+            "example": 15
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "Есть ли следующая страница",
+            "example": true
+          },
+          "hasPrev": {
+            "type": "boolean",
+            "description": "Есть ли предыдущая страница",
+            "example": false
+          }
+        },
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages",
+          "hasNext",
+          "hasPrev"
+        ]
+      },
+      "PaginatedResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "description": "Массив автомобилей",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Car"
+            }
+          },
+          "meta": {
+            "description": "Метаданные пагинации",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaginationMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "FilterOptionsDto": {
+        "type": "object",
+        "properties": {
+          "brands": {
+            "description": "Список уникальных брендов",
+            "example": [
+              "Toyota",
+              "BMW",
+              "Mercedes"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cities": {
+            "description": "Список уникальных городов",
+            "example": [
+              "Москва",
+              "Санкт-Петербург"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transmissions": {
+            "description": "Список уникальных типов трансмиссий",
+            "example": [
+              "AT",
+              "MT"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "models": {
+            "description": "Список уникальных моделей (всех брендов)",
+            "example": [
+              "Camry",
+              "Corolla"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "minYear": {
+            "type": "number",
+            "description": "Минимальный год выпуска среди всех автомобилей",
+            "example": 1990
+          },
+          "maxYear": {
+            "type": "number",
+            "description": "Максимальный год выпуска среди всех автомобилей",
+            "example": 2024
+          },
+          "minPrice": {
+            "type": "number",
+            "description": "Минимальная цена среди всех автомобилей",
+            "example": 100000
+          },
+          "maxPrice": {
+            "type": "number",
+            "description": "Максимальная цена среди всех автомобилей",
+            "example": 10000000
+          },
+          "minEngineVolume": {
+            "type": "number",
+            "description": "Минимальный объем двигателя среди всех автомобилей",
+            "example": 1
+          },
+          "maxEngineVolume": {
+            "type": "number",
+            "description": "Максимальный объем двигателя среди всех автомобилей",
+            "example": 6
+          }
+        },
+        "required": [
+          "brands",
+          "cities",
+          "transmissions",
+          "models",
+          "minYear",
+          "maxYear",
+          "minPrice",
+          "maxPrice",
+          "minEngineVolume",
+          "maxEngineVolume"
+        ]
+      }
+    }
+  }
+}

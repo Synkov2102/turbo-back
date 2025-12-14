@@ -38,6 +38,11 @@ export class AvitoParserService {
   ) {}
 
   async parseAndSave(url: string): Promise<Car> {
+    // Валидация URL - проверяем что это Avito
+    if (!url.includes('avito.ru')) {
+      throw new Error('URL должен быть с домена avito.ru');
+    }
+
     let browser: any;
 
     try {
@@ -473,6 +478,27 @@ export class AvitoParserService {
 
       console.log('Extracted data:', data);
 
+      // Проверяем, существует ли уже автомобиль с таким URL
+      const existingCar = await this.carModel.findOne({ url }).exec();
+      if (existingCar) {
+        // Обновляем существующую запись
+        Object.assign(existingCar, {
+          title: data.title,
+          brand: data.brand,
+          model: data.model,
+          year: data.year,
+          price: data.price,
+          mileage: data.mileage,
+          city: data.city,
+          transmission: data.transmission,
+          engineVolume: data.engineVolume,
+          description: data.description,
+          images: data.images,
+        });
+        return await existingCar.save();
+      }
+
+      // Создаем новую запись
       const car = new this.carModel({
         title: data.title,
         brand: data.brand,

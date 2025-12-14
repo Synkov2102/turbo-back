@@ -1,8 +1,22 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Глобальная валидация
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Удаляет свойства, которых нет в DTO
+      forbidNonWhitelisted: true, // Выбрасывает ошибку при наличии лишних свойств
+      transform: true, // Автоматически преобразует типы
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
 
   // Включаем CORS
   app.enableCors({
@@ -19,6 +33,21 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
+
+  // Настройка Swagger
+  const config = new DocumentBuilder()
+    .setTitle('Turbo Back API')
+    .setDescription('API для парсинга и работы с объявлениями об автомобилях')
+    .setVersion('1.0')
+    .addTag('cars', 'Операции с автомобилями')
+    .addTag('avito-parser', 'Парсинг объявлений с Avito')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
+
+  // Экспорт спецификации доступен по адресам:
+  // - /api-json (JSON формат)
+  // - /api-yaml (YAML формат)
 
   await app.listen(process.env.PORT ?? 3001);
 }
