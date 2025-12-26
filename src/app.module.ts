@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AvitoParserModule } from './avito-parser/avito-parser.module';
+import { ParserModule } from './parser/parser.module';
 import { CarsModule } from './cars/cars.module';
 
 @Module({
@@ -19,7 +19,7 @@ import { CarsModule } from './cars/cars.module';
       }),
       inject: [ConfigService],
     }),
-    AvitoParserModule,
+    ParserModule,
     CarsModule,
   ],
 })

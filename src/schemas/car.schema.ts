@@ -95,6 +95,23 @@ export class Car {
   })
   @Prop({ default: Date.now })
   createdAt: Date;
+
+  @ApiProperty({
+    description: 'Статус объявления',
+    example: 'active',
+    enum: ['active', 'sold', 'removed', 'unknown'],
+    required: false,
+  })
+  @Prop({ enum: ['active', 'sold', 'removed', 'unknown'], default: 'active' })
+  status: string;
+
+  @ApiProperty({
+    description: 'Дата последней проверки статуса',
+    example: '2024-01-01T00:00:00.000Z',
+    required: false,
+  })
+  @Prop()
+  lastChecked: Date;
 }
 
 export const CarSchema = SchemaFactory.createForClass(Car);
@@ -108,6 +125,8 @@ CarSchema.index({ city: 1 });
 CarSchema.index({ transmission: 1 });
 CarSchema.index({ url: 1 }, { unique: true }); // Уникальный индекс для предотвращения дубликатов
 CarSchema.index({ createdAt: -1 }); // Для сортировки по дате
+CarSchema.index({ status: 1 }); // Для фильтрации по статусу
+CarSchema.index({ lastChecked: -1 }); // Для сортировки по дате проверки
 
 // Составные индексы для частых запросов
 CarSchema.index({ brand: 1, model: 1 });

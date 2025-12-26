@@ -59,6 +59,8 @@ export class CarsService {
 
     // Строим запрос
     const query: FilterQuery<CarDocument> = {};
+    // По умолчанию показываем только активные объявления
+    query.status = { $ne: 'sold' };
     if (filters.brand) query.brand = filters.brand;
     if (filters.model) query.model = filters.model;
     if (filters.minYear || filters.maxYear) {

@@ -2,8 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { initializeProxies } from './parser/utils/browser-helper';
 
 async function bootstrap() {
+  // Инициализируем прокси при старте приложения
+  initializeProxies();
+
   const app = await NestFactory.create(AppModule);
 
   // Глобальная валидация
@@ -40,7 +44,7 @@ async function bootstrap() {
     .setDescription('API для парсинга и работы с объявлениями об автомобилях')
     .setVersion('1.0')
     .addTag('cars', 'Операции с автомобилями')
-    .addTag('avito-parser', 'Парсинг объявлений с Avito')
+    .addTag('parser', 'Парсинг объявлений с Avito и Auto.ru')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);

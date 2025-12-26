@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "paths": {
-    "/avito-parser/parse": {
+    "/parser/avito": {
       "post": {
-        "operationId": "AvitoParserController_parseAvitoAd",
+        "operationId": "ParserController_parseAvitoAd",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -32,7 +32,122 @@
         },
         "summary": "Распарсить объявление с Avito и сохранить в базу данных",
         "tags": [
-          "avito-parser"
+          "parser"
+        ]
+      }
+    },
+    "/parser/autoru": {
+      "post": {
+        "operationId": "ParserController_parseAutoRuAd",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить объявление с Auto.ru и сохранить в базу данных",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/check-status/{id}": {
+      "patch": {
+        "operationId": "ParserController_checkCarStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "ID автомобиля",
+            "schema": {
+              "example": "507f1f77bcf86cd799439011",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Статус объявления обновлен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Автомобиль не найден"
+          }
+        },
+        "summary": "Проверить статус объявления по ID автомобиля",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/check-status": {
+      "get": {
+        "description": "Проверяет все активные и unknown объявления, которые не проверялись более указанного количества дней. Возвращает список проверенных автомобилей, статистику и список тех, у которых изменился статус.",
+        "operationId": "ParserController_checkOldCars",
+        "parameters": [
+          {
+            "name": "daysOld",
+            "required": false,
+            "in": "query",
+            "description": "Проверять объявления старше N дней (по умолчанию 7)",
+            "schema": {
+              "example": 7,
+              "type": "number"
+            }
+          },
+          {
+            "name": "checkAll",
+            "required": false,
+            "in": "query",
+            "description": "Проверять все объявления, не только активные (по умолчанию false)",
+            "schema": {
+              "example": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат проверки со статистикой",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusCheckResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Проверить статус старых активных и unknown объявлений",
+        "tags": [
+          "parser"
         ]
       }
     },
@@ -315,7 +430,7 @@
         "properties": {
           "url": {
             "type": "string",
-            "description": "URL объявления на Avito",
+            "description": "URL объявления на Avito или Auto.ru",
             "example": "https://www.avito.ru/moskva/avtomobili/toyota_camry_2020_1234567890"
           }
         },
@@ -398,12 +513,104 @@
             "type": "string",
             "description": "Дата создания записи",
             "example": "2024-01-01T00:00:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "description": "Статус объявления",
+            "example": "active",
+            "enum": [
+              "active",
+              "sold",
+              "removed",
+              "unknown"
+            ]
+          },
+          "lastChecked": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Дата последней проверки статуса",
+            "example": "2024-01-01T00:00:00.000Z"
           }
         },
         "required": [
           "title",
           "url",
           "createdAt"
+        ]
+      },
+      "StatusCheckStatsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Общее количество проверенных объявлений",
+            "example": 50
+          },
+          "active": {
+            "type": "number",
+            "description": "Количество объявлений со статусом active",
+            "example": 45
+          },
+          "sold": {
+            "type": "number",
+            "description": "Количество проданных объявлений",
+            "example": 3
+          },
+          "removed": {
+            "type": "number",
+            "description": "Количество удаленных объявлений",
+            "example": 2
+          },
+          "unknown": {
+            "type": "number",
+            "description": "Количество объявлений с неизвестным статусом",
+            "example": 0
+          },
+          "statusChanged": {
+            "type": "number",
+            "description": "Количество объявлений, у которых изменился статус",
+            "example": 5
+          }
+        },
+        "required": [
+          "total",
+          "active",
+          "sold",
+          "removed",
+          "unknown",
+          "statusChanged"
+        ]
+      },
+      "StatusCheckResultDto": {
+        "type": "object",
+        "properties": {
+          "checked": {
+            "description": "Список проверенных автомобилей",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Car"
+            }
+          },
+          "stats": {
+            "description": "Статистика проверки",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatusCheckStatsDto"
+              }
+            ]
+          },
+          "changed": {
+            "description": "Список автомобилей, у которых изменился статус",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Car"
+            }
+          }
+        },
+        "required": [
+          "checked",
+          "stats",
+          "changed"
         ]
       },
       "PaginationMetaDto": {

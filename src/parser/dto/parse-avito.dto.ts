@@ -3,7 +3,7 @@ import { IsString, IsUrl } from 'class-validator';
 
 export class ParseAvitoDto {
   @ApiProperty({
-    description: 'URL объявления на Avito',
+    description: 'URL объявления на Avito или Auto.ru',
     example:
       'https://www.avito.ru/moskva/avtomobili/toyota_camry_2020_1234567890',
   })
