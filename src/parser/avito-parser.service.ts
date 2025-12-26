@@ -1,11 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
 import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
 import {
@@ -20,7 +18,11 @@ import {
 
 interface ExtractedData {
   title: string;
-  price: number;
+  price: {
+    RUB?: number;
+    USD?: number;
+    EUR?: number;
+  };
   description: string;
   brand: string;
   model: string;
@@ -34,10 +36,7 @@ interface ExtractedData {
 
 @Injectable()
 export class AvitoParserService {
-  constructor(
-    @InjectModel(Car.name) private carModel: Model<CarDocument>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) {}
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
 
   /**
    * Парсит фотографии через модальное окно для получения лучшего качества
@@ -623,7 +622,28 @@ export class AvitoParserService {
           priceElement?.getAttribute('content') ||
           priceElement?.textContent?.trim() ||
           '';
-        const price = parseInt(priceText.replace(/\D/g, '')) || 0;
+        const priceValue = parseInt(priceText.replace(/\D/g, '')) || 0;
+
+        // Определяем валюту по тексту цены
+        const priceTextLower = priceText.toLowerCase();
+        const price: { RUB?: number; USD?: number; EUR?: number } = {};
+
+        if (
+          priceTextLower.includes('$') ||
+          priceTextLower.includes('usd') ||
+          priceTextLower.includes('долл')
+        ) {
+          price.USD = priceValue;
+        } else if (
+          priceTextLower.includes('€') ||
+          priceTextLower.includes('eur') ||
+          priceTextLower.includes('евро')
+        ) {
+          price.EUR = priceValue;
+        } else {
+          // По умолчанию рубли (Avito обычно в рублях)
+          price.RUB = priceValue;
+        }
 
         const descriptionElement = document.querySelector(
           '[itemprop="description"]',
@@ -866,7 +886,7 @@ export class AvitoParserService {
 
         const result: ExtractedData = {
           title,
-          price,
+          price: price,
           description,
           brand,
           model,

@@ -46,7 +46,7 @@ export class CarsFilterDto {
   maxYear?: number;
 
   @ApiProperty({
-    description: 'Минимальная цена в рублях',
+    description: 'Минимальная цена',
     example: 500000,
     minimum: 0,
     required: false,
@@ -58,7 +58,7 @@ export class CarsFilterDto {
   minPrice?: number;
 
   @ApiProperty({
-    description: 'Максимальная цена в рублях',
+    description: 'Максимальная цена',
     example: 5000000,
     minimum: 0,
     required: false,
@@ -68,6 +68,17 @@ export class CarsFilterDto {
   @IsNumber()
   @Min(0)
   maxPrice?: number;
+
+  @ApiProperty({
+    description: 'Валюта для фильтрации по цене',
+    example: 'RUB',
+    enum: ['RUB', 'USD', 'EUR'],
+    required: false,
+    default: 'RUB',
+  })
+  @IsOptional()
+  @IsString()
+  priceCurrency?: 'RUB' | 'USD' | 'EUR';
 
   @ApiProperty({ description: 'Город', example: 'Москва', required: false })
   @IsOptional()

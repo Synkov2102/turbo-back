@@ -1,8 +1,6 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
 import { Car, CarDocument } from '../schemas/car.schema';
 import { FilterOptions } from './interfaces/filter-options.interface';
 import { PaginatedResponse } from './interfaces/paginated-response.interface';
@@ -15,6 +13,7 @@ interface CarFilters {
   maxYear?: number;
   minPrice?: number;
   maxPrice?: number;
+  priceCurrency?: 'RUB' | 'USD' | 'EUR';
   city?: string;
   transmission?: string;
   minEngineVolume?: number;
@@ -32,7 +31,6 @@ interface RangeFilter {
 export class CarsService {
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async getCarsWithFilters(
@@ -43,19 +41,7 @@ export class CarsService {
     const limit = filters.limit || 10;
     const skip = (page - 1) * limit;
 
-    // Создаем ключ кэша без параметров пагинации для подсчета общего количества
-    const filtersForCache = { ...filters };
-    delete filtersForCache.page;
-    delete filtersForCache.limit;
-    const cacheKey = `cars:${JSON.stringify(filtersForCache)}:page:${page}:limit:${limit}`;
-    const countCacheKey = `cars:count:${JSON.stringify(filtersForCache)}`;
-
-    // Проверяем кэш
-    const cached =
-      await this.cacheManager.get<PaginatedResponse<Car>>(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    // Кеш отключен для локальной разработки
 
     // Строим запрос
     const query: FilterQuery<CarDocument> = {};
@@ -78,6 +64,8 @@ export class CarsService {
       query.year = yearFilter;
     }
     if (filters.minPrice || filters.maxPrice) {
+      const currency = filters.priceCurrency || 'RUB';
+      const priceField = `price.${currency}`;
       const priceFilter: RangeFilter = {};
       if (filters.minPrice) priceFilter.$gte = filters.minPrice;
       if (filters.maxPrice) priceFilter.$lte = filters.maxPrice;
@@ -89,7 +77,7 @@ export class CarsService {
       ) {
         throw new Error('minPrice не может быть больше maxPrice');
       }
-      query.price = priceFilter;
+      query[priceField] = priceFilter;
     }
     if (filters.city) query.city = filters.city;
     if (filters.transmission) query.transmission = filters.transmission;
@@ -116,7 +104,7 @@ export class CarsService {
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 }); // Сортировка по дате создания (новые сначала)
-    const totalQuery = this.getTotalCount(query, countCacheKey);
+    const totalQuery = this.getTotalCount(query);
     const cars = await carsQuery.exec();
     const total = await totalQuery;
 
@@ -134,46 +122,22 @@ export class CarsService {
       },
     };
 
-    // Кэшируем результат на 1 час (3600000 мс)
-    await this.cacheManager.set(cacheKey, result, 3600000);
     return result;
   }
 
   private async getTotalCount(
     query: FilterQuery<CarDocument>,
-    cacheKey: string,
   ): Promise<number> {
-    const cached = await this.cacheManager.get<number>(cacheKey);
-    if (cached !== undefined) {
-      return cached;
-    }
-
     const total = await this.carModel.countDocuments(query).exec();
-    await this.cacheManager.set(cacheKey, total, 3600000); // 1 hour
     return total;
   }
 
   async getCarById(id: string): Promise<Car | null> {
-    const cacheKey = `car:${id}`;
-    const cached = await this.cacheManager.get<Car>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
     const car = await this.carModel.findById(id).exec();
-    if (car) {
-      await this.cacheManager.set(cacheKey, car, 3600000); // 1 hour in ms
-    }
     return car;
   }
 
   async getFilterOptions(): Promise<FilterOptions> {
-    const cacheKey = 'filter-options';
-    const cached = await this.cacheManager.get<FilterOptions>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
     const aggregationResult = await this.carModel.aggregate([
       {
         $facet: {
@@ -240,10 +204,10 @@ export class CarsService {
               },
             },
           ],
-          priceRange: [
+          priceRangeRUB: [
             {
               $match: {
-                price: {
+                'price.RUB': {
                   $exists: true,
                   $ne: null,
                 },
@@ -252,8 +216,42 @@ export class CarsService {
             {
               $group: {
                 _id: null,
-                minPrice: { $min: '$price' },
-                maxPrice: { $max: '$price' },
+                minPrice: { $min: '$price.RUB' },
+                maxPrice: { $max: '$price.RUB' },
+              },
+            },
+          ],
+          priceRangeUSD: [
+            {
+              $match: {
+                'price.USD': {
+                  $exists: true,
+                  $ne: null,
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                minPrice: { $min: '$price.USD' },
+                maxPrice: { $max: '$price.USD' },
+              },
+            },
+          ],
+          priceRangeEUR: [
+            {
+              $match: {
+                'price.EUR': {
+                  $exists: true,
+                  $ne: null,
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                minPrice: { $min: '$price.EUR' },
+                maxPrice: { $max: '$price.EUR' },
               },
             },
           ],
@@ -284,7 +282,9 @@ export class CarsService {
       transmissions: Array<{ _id: string }>;
       models: Array<{ _id: string }>;
       yearRange: Array<{ minYear: number; maxYear: number }>;
-      priceRange: Array<{ minPrice: number; maxPrice: number }>;
+      priceRangeRUB: Array<{ minPrice: number; maxPrice: number }>;
+      priceRangeUSD: Array<{ minPrice: number; maxPrice: number }>;
+      priceRangeEUR: Array<{ minPrice: number; maxPrice: number }>;
       engineVolumeRange: Array<{
         minEngineVolume: number;
         maxEngineVolume: number;
@@ -292,11 +292,25 @@ export class CarsService {
     };
 
     const yearRange = result.yearRange[0] || { minYear: 0, maxYear: 0 };
-    const priceRange = result.priceRange[0] || { minPrice: 0, maxPrice: 0 };
+    const priceRangeRUB = result.priceRangeRUB[0] || { minPrice: 0, maxPrice: 0 };
+    const priceRangeUSD = result.priceRangeUSD[0] || { minPrice: 0, maxPrice: 0 };
+    const priceRangeEUR = result.priceRangeEUR[0] || { minPrice: 0, maxPrice: 0 };
     const engineVolumeRange = result.engineVolumeRange[0] || {
       minEngineVolume: 0,
       maxEngineVolume: 0,
     };
+
+    // Берем максимальный диапазон из всех валют для обратной совместимости
+    const minPrice = Math.min(
+      priceRangeRUB.minPrice || Infinity,
+      priceRangeUSD.minPrice || Infinity,
+      priceRangeEUR.minPrice || Infinity,
+    );
+    const maxPrice = Math.max(
+      priceRangeRUB.maxPrice || 0,
+      priceRangeUSD.maxPrice || 0,
+      priceRangeEUR.maxPrice || 0,
+    );
 
     const options: FilterOptions = {
       brands: result.brands
@@ -317,25 +331,18 @@ export class CarsService {
         .sort(),
       minYear: yearRange.minYear,
       maxYear: yearRange.maxYear,
-      minPrice: priceRange.minPrice,
-      maxPrice: priceRange.maxPrice,
+      minPrice: isFinite(minPrice) ? minPrice : 0,
+      maxPrice: maxPrice,
       minEngineVolume: engineVolumeRange.minEngineVolume,
       maxEngineVolume: engineVolumeRange.maxEngineVolume,
     };
 
-    await this.cacheManager.set(cacheKey, options, 3600000);
     return options;
   }
 
   async getModelsByBrand(brand: string): Promise<string[]> {
     if (!brand) {
       return [];
-    }
-
-    const cacheKey = `models-${brand}`;
-    const cached = await this.cacheManager.get<string[]>(cacheKey);
-    if (cached) {
-      return cached;
     }
 
     // Получаем уникальные модели для указанного бренда
@@ -354,7 +361,6 @@ export class CarsService {
       .filter((model) => model && model.trim().length > 0)
       .sort();
 
-    await this.cacheManager.set(cacheKey, filteredModels, 3600000); // Кэш на 1 час
     return filteredModels;
   }
 }

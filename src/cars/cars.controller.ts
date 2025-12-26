@@ -39,6 +39,7 @@ export class CarsController {
       maxYear: query.maxYear,
       minPrice: query.minPrice,
       maxPrice: query.maxPrice,
+      priceCurrency: query.priceCurrency,
       city: query.city,
       transmission: query.transmission,
       minEngineVolume: query.minEngineVolume,

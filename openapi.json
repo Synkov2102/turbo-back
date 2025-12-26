@@ -201,7 +201,7 @@
             "name": "minPrice",
             "required": false,
             "in": "query",
-            "description": "Минимальная цена в рублях",
+            "description": "Минимальная цена",
             "schema": {
               "minimum": 0,
               "example": 500000,
@@ -212,11 +212,27 @@
             "name": "maxPrice",
             "required": false,
             "in": "query",
-            "description": "Максимальная цена в рублях",
+            "description": "Максимальная цена",
             "schema": {
               "minimum": 0,
               "example": 5000000,
               "type": "number"
+            }
+          },
+          {
+            "name": "priceCurrency",
+            "required": false,
+            "in": "query",
+            "description": "Валюта для фильтрации по цене",
+            "schema": {
+              "default": "RUB",
+              "example": "RUB",
+              "type": "string",
+              "enum": [
+                "RUB",
+                "USD",
+                "EUR"
+              ]
             }
           },
           {
@@ -462,9 +478,13 @@
             "example": 2020
           },
           "price": {
-            "type": "number",
-            "description": "Цена в рублях",
-            "example": 1500000
+            "type": "object",
+            "description": "Цена в разных валютах",
+            "example": {
+              "RUB": 1500000,
+              "USD": 16000,
+              "EUR": 15000
+            }
           },
           "mileage": {
             "type": "number",

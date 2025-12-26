@@ -34,12 +34,23 @@ export class Car {
   year: number;
 
   @ApiProperty({
-    description: 'Цена в рублях',
-    example: 1500000,
+    description: 'Цена в разных валютах',
+    example: { RUB: 1500000, USD: 16000, EUR: 15000 },
     required: false,
   })
-  @Prop()
-  price: number;
+  @Prop({
+    type: {
+      RUB: { type: Number, required: false },
+      USD: { type: Number, required: false },
+      EUR: { type: Number, required: false },
+    },
+    _id: false,
+  })
+  price: {
+    RUB?: number;
+    USD?: number;
+    EUR?: number;
+  };
 
   @ApiProperty({
     description: 'Пробег в километрах',
@@ -120,7 +131,9 @@ export const CarSchema = SchemaFactory.createForClass(Car);
 CarSchema.index({ brand: 1 });
 CarSchema.index({ model: 1 });
 CarSchema.index({ year: 1 });
-CarSchema.index({ price: 1 });
+CarSchema.index({ 'price.RUB': 1 });
+CarSchema.index({ 'price.USD': 1 });
+CarSchema.index({ 'price.EUR': 1 });
 CarSchema.index({ city: 1 });
 CarSchema.index({ transmission: 1 });
 CarSchema.index({ url: 1 }, { unique: true }); // Уникальный индекс для предотвращения дубликатов

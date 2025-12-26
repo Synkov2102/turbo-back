@@ -1,11 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Car, CarDocument } from '../schemas/car.schema';
@@ -19,7 +17,6 @@ const USER_AGENT =
 export class AutoRuParserService {
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async parseAndSave(url: string): Promise<Car> {
@@ -204,13 +201,43 @@ export class AutoRuParserService {
         return Array.from(urls);
       });
 
+      // ---------- текст цены для определения валюты ----------
+      const priceText = await page.evaluate(() => {
+        const priceElement =
+          document.querySelector('.CardPrice__price') ||
+          document.querySelector('[data-ftid="component_price"]') ||
+          document.querySelector('.price-value');
+        return priceElement?.textContent?.trim() || '';
+      });
+
       // ---------- подготавливаем данные ----------
 
       const brand = saleData?.markName || '';
       const model = saleData?.modelName || '';
       const year = saleData?.year ? Number(saleData.year) : 0;
-      const price = saleData?.price ? Number(saleData.price) : 0;
+      const priceValue = saleData?.price ? Number(saleData.price) : 0;
       const mileage = saleData?.['km-age'] ? Number(saleData['km-age']) : 0;
+
+      // Определяем валюту (Auto.ru обычно в рублях, но проверим)
+      const priceTextLower = priceText.toLowerCase();
+      const price: { RUB?: number; USD?: number; EUR?: number } = {};
+
+      if (
+        priceTextLower.includes('$') ||
+        priceTextLower.includes('usd') ||
+        priceTextLower.includes('долл')
+      ) {
+        price.USD = priceValue;
+      } else if (
+        priceTextLower.includes('€') ||
+        priceTextLower.includes('eur') ||
+        priceTextLower.includes('евро')
+      ) {
+        price.EUR = priceValue;
+      } else {
+        // По умолчанию рубли (Auto.ru обычно в рублях)
+        price.RUB = priceValue;
+      }
 
       // Коробка: приоритет DOM, потом saleData.transmission
       let transmission = transmissionFromDom || '';
@@ -235,7 +262,7 @@ export class AutoRuParserService {
         brand,
         model,
         year,
-        price,
+        price: price,
         mileage,
         city,
         transmission,
