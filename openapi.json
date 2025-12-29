@@ -71,6 +71,41 @@
         ]
       }
     },
+    "/parser/oldtimerfarm": {
+      "post": {
+        "operationId": "ParserController_parseOldtimerfarmAd",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить объявление с Oldtimerfarm.be и сохранить в базу данных",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
     "/parser/check-status/{id}": {
       "patch": {
         "operationId": "ParserController_checkCarStatus",
@@ -246,6 +281,16 @@
             }
           },
           {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "Страна",
+            "schema": {
+              "example": "Россия",
+              "type": "string"
+            }
+          },
+          {
             "name": "transmission",
             "required": false,
             "in": "query",
@@ -385,6 +430,47 @@
         ]
       }
     },
+    "/cars/prices/update-rubles": {
+      "post": {
+        "description": "Запрашивает актуальные курсы валют с сайта ЦБ РФ и обновляет цены в рублях для всех машин, у которых есть цена в USD или EUR",
+        "operationId": "CarsController_updatePricesInRubles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат обновления цен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "number",
+                      "description": "Количество обновленных машин"
+                    },
+                    "usdUpdated": {
+                      "type": "number",
+                      "description": "Количество машин с ценой в USD"
+                    },
+                    "eurUpdated": {
+                      "type": "number",
+                      "description": "Количество машин с ценой в EUR"
+                    },
+                    "errors": {
+                      "type": "number",
+                      "description": "Количество ошибок при обновлении"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Обновить цены в рублях по актуальным курсам валют",
+        "tags": [
+          "cars"
+        ]
+      }
+    },
     "/cars/{id}": {
       "get": {
         "operationId": "CarsController_getCarById",
@@ -491,10 +577,13 @@
             "description": "Пробег в километрах",
             "example": 50000
           },
-          "city": {
-            "type": "string",
-            "description": "Город",
-            "example": "Москва"
+          "location": {
+            "type": "object",
+            "description": "Локация автомобиля",
+            "example": {
+              "city": "Москва",
+              "country": "Россия"
+            }
           },
           "transmission": {
             "type": "string",

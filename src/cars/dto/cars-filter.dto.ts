@@ -86,6 +86,15 @@ export class CarsFilterDto {
   city?: string;
 
   @ApiProperty({
+    description: 'Страна',
+    example: 'Россия',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({
     description: 'Тип трансмиссии',
     example: 'AT',
     enum: ['AT', 'MT', 'AMT', 'CVT'],

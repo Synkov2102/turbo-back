@@ -91,8 +91,8 @@ export class AutoRuParserService {
         return node?.textContent?.trim() || '';
       });
 
-      // ---------- город ----------
-      const city = await page.evaluate(() => {
+      // ---------- город и страна ----------
+      const { city, country } = await page.evaluate(() => {
         const regionSpan =
           document.querySelector<HTMLElement>(
             '.CardSellerNamePlace2__place .MetroListPlace__regionName',
@@ -100,10 +100,12 @@ export class AutoRuParserService {
           document.querySelector<HTMLElement>('.MetroListPlace__regionName');
 
         const text = regionSpan?.textContent?.trim() || '';
-        if (!text) return 'Unknown';
+        if (!text) return { city: 'Unknown', country: 'Россия' };
 
         // на всякий случай обрежем всё после запятой
-        return text.split(',')[0].trim() || 'Unknown';
+        const cityValue = text.split(',')[0].trim() || 'Unknown';
+        // По умолчанию Россия для Auto.ru
+        return { city: cityValue, country: 'Россия' };
       });
 
       // ---------- характеристики: двигатель (объём) + коробка ----------
@@ -212,8 +214,8 @@ export class AutoRuParserService {
 
       // ---------- подготавливаем данные ----------
 
-      const brand = saleData?.markName || '';
-      const model = saleData?.modelName || '';
+      let brand = saleData?.markName || '';
+      let model = saleData?.modelName || '';
       const year = saleData?.year ? Number(saleData.year) : 0;
       const priceValue = saleData?.price ? Number(saleData.price) : 0;
       const mileage = saleData?.['km-age'] ? Number(saleData['km-age']) : 0;
@@ -264,7 +266,10 @@ export class AutoRuParserService {
         year,
         price: price,
         mileage,
-        city,
+        location: {
+          city,
+          country,
+        },
         transmission,
         engineVolume: engineVolume || 0,
         description,

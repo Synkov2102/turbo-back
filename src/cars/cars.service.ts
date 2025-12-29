@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
 import { Car, CarDocument } from '../schemas/car.schema';
 import { FilterOptions } from './interfaces/filter-options.interface';
 import { PaginatedResponse } from './interfaces/paginated-response.interface';
+import { CbrService } from './cbr.service';
 
 // Интерфейсы
 interface CarFilters {
@@ -15,6 +16,7 @@ interface CarFilters {
   maxPrice?: number;
   priceCurrency?: 'RUB' | 'USD' | 'EUR';
   city?: string;
+  country?: string;
   transmission?: string;
   minEngineVolume?: number;
   maxEngineVolume?: number;
@@ -29,8 +31,11 @@ interface RangeFilter {
 
 @Injectable()
 export class CarsService {
+  private readonly logger = new Logger(CarsService.name);
+
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
+    private readonly cbrService: CbrService,
   ) {}
 
   async getCarsWithFilters(
@@ -79,7 +84,11 @@ export class CarsService {
       }
       query[priceField] = priceFilter;
     }
-    if (filters.city) query.city = filters.city;
+    if (filters.city || filters.country) {
+      query.location = {};
+      if (filters.city) query.location.city = filters.city;
+      if (filters.country) query.location.country = filters.country;
+    }
     if (filters.transmission) query.transmission = filters.transmission;
     if (filters.minEngineVolume || filters.maxEngineVolume) {
       const engineVolumeFilter: RangeFilter = {};
@@ -156,13 +165,13 @@ export class CarsService {
           cities: [
             {
               $match: {
-                city: {
+                'location.city': {
                   $exists: true,
                   $nin: [null, ''],
                 },
               },
             },
-            { $group: { _id: '$city' } },
+            { $group: { _id: '$location.city' } },
           ],
           transmissions: [
             {
@@ -362,5 +371,103 @@ export class CarsService {
       .sort();
 
     return filteredModels;
+  }
+
+  /**
+   * Обновляет цены в рублях для всех машин, у которых есть цена в валюте
+   * Использует актуальные курсы валют с сайта ЦБ РФ
+   */
+  async updatePricesInRubles(): Promise<{
+    updated: number;
+    usdUpdated: number;
+    eurUpdated: number;
+    errors: number;
+  }> {
+    this.logger.log('Начало обновления цен в рублях...');
+
+    try {
+      // Получаем актуальные курсы валют
+      const rates = await this.cbrService.getExchangeRates();
+      this.logger.log(
+        `Получены курсы валют: USD = ${rates.USD}, EUR = ${rates.EUR}`,
+      );
+
+      let updated = 0;
+      let usdUpdated = 0;
+      let eurUpdated = 0;
+      let errors = 0;
+
+      // Находим все машины, у которых есть цена в USD или EUR
+      const carsWithCurrency = await this.carModel
+        .find({
+          $or: [
+            { 'price.USD': { $exists: true, $ne: null, $gt: 0 } },
+            { 'price.EUR': { $exists: true, $ne: null, $gt: 0 } },
+          ],
+        })
+        .exec();
+
+      this.logger.log(
+        `Найдено машин с ценами в валюте: ${carsWithCurrency.length}`,
+      );
+
+      // Обновляем каждую машину
+      for (const car of carsWithCurrency) {
+        try {
+          let rubPriceFromUsd = 0;
+          let rubPriceFromEur = 0;
+
+          // Если есть цена в USD, пересчитываем в рубли
+          if (car.price?.USD && car.price.USD > 0) {
+            rubPriceFromUsd = Math.round(car.price.USD * rates.USD);
+            usdUpdated++;
+            this.logger.debug(
+              `Машина ${car._id}: USD ${car.price.USD} -> RUB ${rubPriceFromUsd}`,
+            );
+          }
+
+          // Если есть цена в EUR, пересчитываем в рубли
+          if (car.price?.EUR && car.price.EUR > 0) {
+            rubPriceFromEur = Math.round(car.price.EUR * rates.EUR);
+            eurUpdated++;
+            this.logger.debug(
+              `Машина ${car._id}: EUR ${car.price.EUR} -> RUB ${rubPriceFromEur}`,
+            );
+          }
+
+          // Берем максимальную цену в рублях из доступных валют
+          const finalRubPrice = Math.max(rubPriceFromUsd, rubPriceFromEur);
+
+          if (finalRubPrice > 0) {
+            await this.carModel.updateOne(
+              { _id: car._id },
+              { $set: { 'price.RUB': finalRubPrice } },
+            );
+            updated++;
+          }
+        } catch (error) {
+          errors++;
+          this.logger.error(
+            `Ошибка при обновлении машины ${car._id}: ${(error as Error).message}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Обновление завершено: обновлено ${updated} машин (USD: ${usdUpdated}, EUR: ${eurUpdated}), ошибок: ${errors}`,
+      );
+
+      return {
+        updated,
+        usdUpdated,
+        eurUpdated,
+        errors,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при обновлении цен: ${(error as Error).message}`,
+      );
+      throw error;
+    }
   }
 }

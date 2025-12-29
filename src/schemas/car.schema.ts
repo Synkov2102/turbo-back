@@ -60,9 +60,22 @@ export class Car {
   @Prop()
   mileage: number;
 
-  @ApiProperty({ description: 'Город', example: 'Москва', required: false })
-  @Prop()
-  city: string;
+  @ApiProperty({
+    description: 'Локация автомобиля',
+    example: { city: 'Москва', country: 'Россия' },
+    required: false,
+  })
+  @Prop({
+    type: {
+      city: { type: String, required: false },
+      country: { type: String, required: false },
+    },
+    _id: false,
+  })
+  location: {
+    city?: string;
+    country?: string;
+  };
 
   @ApiProperty({
     description: 'Тип трансмиссии',
@@ -134,7 +147,8 @@ CarSchema.index({ year: 1 });
 CarSchema.index({ 'price.RUB': 1 });
 CarSchema.index({ 'price.USD': 1 });
 CarSchema.index({ 'price.EUR': 1 });
-CarSchema.index({ city: 1 });
+CarSchema.index({ 'location.city': 1 });
+CarSchema.index({ 'location.country': 1 });
 CarSchema.index({ transmission: 1 });
 CarSchema.index({ url: 1 }, { unique: true }); // Уникальный индекс для предотвращения дубликатов
 CarSchema.index({ createdAt: -1 }); // Для сортировки по дате
@@ -144,7 +158,8 @@ CarSchema.index({ lastChecked: -1 }); // Для сортировки по дат
 // Составные индексы для частых запросов
 CarSchema.index({ brand: 1, model: 1 });
 CarSchema.index({ brand: 1, year: 1 });
-CarSchema.index({ city: 1, brand: 1 });
+CarSchema.index({ 'location.city': 1, brand: 1 });
+CarSchema.index({ 'location.country': 1, 'location.city': 1 });
 
 // Disable version key to remove __v from documents
 CarSchema.set('versionKey', false);

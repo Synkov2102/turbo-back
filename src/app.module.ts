@@ -16,6 +16,14 @@ import { CarsModule } from './cars/cars.module';
         uri:
           configService.get<string>('MONGO_URI') ||
           'mongodb://localhost:27017/scraper',
+        // Оптимизация для скорости записи
+        maxPoolSize: 50, // Увеличиваем размер пула соединений
+        minPoolSize: 10, // Минимальный размер пула
+        // Оптимизация для bulk операций
+        writeConcern: {
+          w: 1, // Минимальный write concern для скорости (1 = подтверждение от primary)
+          j: false, // Не ждать записи на диск (для скорости)
+        },
       }),
       inject: [ConfigService],
     }),

@@ -28,7 +28,10 @@ interface ExtractedData {
   model: string;
   year: number;
   mileage: number;
-  city: string;
+  location: {
+    city?: string;
+    country?: string;
+  };
   transmission: string;
   engineVolume: number;
   images: string[];
@@ -695,6 +698,7 @@ export class AvitoParserService {
           }
         }
 
+
         const yearElement = document.querySelector(
           '[itemprop="productionDate"]',
         );
@@ -768,6 +772,9 @@ export class AvitoParserService {
           const cityPart = cityRawText.split(',')[0].trim();
           city = cityPart || cityRawText;
         }
+
+        // Определяем страну (по умолчанию Россия для Avito)
+        const country = 'Россия';
 
         let transmission = '';
         let yearFromTitle = 0;
@@ -892,7 +899,10 @@ export class AvitoParserService {
           model,
           year,
           mileage,
-          city,
+          location: {
+            city,
+            country,
+          },
           transmission,
           engineVolume,
           images: [],
@@ -1052,7 +1062,7 @@ export class AvitoParserService {
             year: data.year,
             price: data.price,
             mileage: data.mileage,
-            city: data.city,
+            location: data.location,
             transmission: data.transmission,
             engineVolume: data.engineVolume,
             description: data.description,

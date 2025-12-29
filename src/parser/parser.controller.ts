@@ -17,11 +17,13 @@ import {
 } from '@nestjs/swagger';
 import { AvitoParserService } from './avito-parser.service';
 import { AutoRuParserService } from './autoru-parser.service';
+import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 import { Car } from '../schemas/car.schema';
 import { ParseAvitoDto } from './dto/parse-avito.dto';
 import { StatusCheckResultDto } from './dto/status-check-result.dto';
 import { StatusCheckResult } from './interfaces/status-check-result.interface';
+import { ParseAllResultDto } from './dto/parse-all-result.dto';
 
 @ApiTags('parser')
 @Controller('parser')
@@ -29,6 +31,7 @@ export class ParserController {
   constructor(
     private readonly avitoParserService: AvitoParserService,
     private readonly autoruParserService: AutoRuParserService,
+    private readonly oldtimerfarmParserService: OldtimerfarmParserService,
     private readonly statusCheckerService: StatusCheckerService,
   ) {}
 
@@ -66,6 +69,32 @@ export class ParserController {
   })
   async parseAutoRuAd(@Body() dto: ParseAvitoDto): Promise<Car> {
     return this.autoruParserService.parseAndSave(dto.url);
+  }
+
+  @Post('oldtimerfarm')
+  @ApiOperation({
+    summary: 'Распарсить объявление с Oldtimerfarm.be и сохранить в базу данных',
+  })
+  @ApiBody({ type: ParseAvitoDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Объявление успешно распарсено и сохранено',
+    type: Car,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверный URL',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Объявление не найдено или это мотоцикл',
+  })
+  async parseOldtimerfarmAd(@Body() dto: ParseAvitoDto): Promise<Car> {
+    const car = await this.oldtimerfarmParserService.parseAndSave(dto.url);
+    if (!car) {
+      throw new Error('Объявление не найдено или это мотоцикл');
+    }
+    return car;
   }
 
   @Patch('check-status/:id')
@@ -127,5 +156,41 @@ export class ParserController {
     const days = daysOld ? parseInt(daysOld, 10) : 7;
     const checkAllFlag = checkAll === 'true' || checkAll === '1';
     return this.statusCheckerService.checkOldActiveCars(days, checkAllFlag);
+  }
+
+  @Post('oldtimerfarm/parse-all')
+  @ApiOperation({
+    summary: 'Глобальный парсинг всех автомобилей со страницы Oldtimerfarm',
+    description:
+      'Парсит все объявления со страницы списка Oldtimerfarm, определяет тип транспорта и парсит только автомобили (пропускает мотоциклы).',
+  })
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      properties: {
+        listUrl: {
+          type: 'string',
+          description: 'URL страницы со списком объявлений',
+          example:
+            'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen',
+          default:
+            'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Результат глобального парсинга',
+    type: ParseAllResultDto,
+  })
+  async parseAllOldtimerfarmCars(
+    @Body('listUrl') listUrl?: string,
+  ): Promise<ParseAllResultDto> {
+    const url =
+      listUrl ||
+      'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen';
+    return this.oldtimerfarmParserService.parseAllCarsFromList(url);
   }
 }

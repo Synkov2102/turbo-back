@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Query,
   Param,
   NotFoundException,
@@ -41,6 +42,7 @@ export class CarsController {
       maxPrice: query.maxPrice,
       priceCurrency: query.priceCurrency,
       city: query.city,
+      country: query.country,
       transmission: query.transmission,
       minEngineVolume: query.minEngineVolume,
       maxEngineVolume: query.maxEngineVolume,
@@ -72,6 +74,46 @@ export class CarsController {
       return [];
     }
     return this.carsService.getModelsByBrand(query.brand);
+  }
+
+  @Post('prices/update-rubles')
+  @ApiOperation({
+    summary: 'Обновить цены в рублях по актуальным курсам валют',
+    description:
+      'Запрашивает актуальные курсы валют с сайта ЦБ РФ и обновляет цены в рублях для всех машин, у которых есть цена в USD или EUR',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Результат обновления цен',
+    schema: {
+      type: 'object',
+      properties: {
+        updated: {
+          type: 'number',
+          description: 'Количество обновленных машин',
+        },
+        usdUpdated: {
+          type: 'number',
+          description: 'Количество машин с ценой в USD',
+        },
+        eurUpdated: {
+          type: 'number',
+          description: 'Количество машин с ценой в EUR',
+        },
+        errors: {
+          type: 'number',
+          description: 'Количество ошибок при обновлении',
+        },
+      },
+    },
+  })
+  async updatePricesInRubles(): Promise<{
+    updated: number;
+    usdUpdated: number;
+    eurUpdated: number;
+    errors: number;
+  }> {
+    return await this.carsService.updatePricesInRubles();
   }
 
   @Get(':id')
