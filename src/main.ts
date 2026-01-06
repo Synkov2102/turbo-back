@@ -45,6 +45,7 @@ async function bootstrap() {
     .setVersion('1.0')
     .addTag('cars', 'Операции с автомобилями')
     .addTag('parser', 'Парсинг объявлений с Avito и Auto.ru')
+    .addTag('posts', 'Операции с постами')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);

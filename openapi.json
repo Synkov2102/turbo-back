@@ -98,6 +98,9 @@
           },
           "400": {
             "description": "Неверный URL"
+          },
+          "404": {
+            "description": "Объявление не найдено или это мотоцикл"
           }
         },
         "summary": "Распарсить объявление с Oldtimerfarm.be и сохранить в базу данных",
@@ -181,6 +184,47 @@
           }
         },
         "summary": "Проверить статус старых активных и unknown объявлений",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/oldtimerfarm/parse-all": {
+      "post": {
+        "description": "Парсит все объявления со страницы списка Oldtimerfarm, определяет тип транспорта и парсит только автомобили (пропускает мотоциклы).",
+        "operationId": "ParserController_parseAllOldtimerfarmCars",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "listUrl": {
+                    "type": "string",
+                    "description": "URL страницы со списком объявлений",
+                    "example": "https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen",
+                    "default": "https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Результат глобального парсинга",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseAllResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Глобальный парсинг всех автомобилей со страницы Oldtimerfarm",
         "tags": [
           "parser"
         ]
@@ -506,6 +550,120 @@
           "cars"
         ]
       }
+    },
+    "/posts": {
+      "post": {
+        "description": "Создает новый пост с заголовком, текстом, фотографиями и опциональной ссылкой",
+        "operationId": "PostsController_createPost",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Пост успешно создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Создать новый пост",
+        "tags": [
+          "posts"
+        ]
+      },
+      "get": {
+        "description": "Возвращает список постов с метаданными пагинации",
+        "operationId": "PostsController_getPosts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Номер страницы",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Количество элементов на странице",
+            "schema": {
+              "default": 10,
+              "example": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список постов с метаданными пагинации",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedPostsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Получить список постов с пагинацией",
+        "tags": [
+          "posts"
+        ]
+      }
+    },
+    "/posts/{id}": {
+      "get": {
+        "description": "Возвращает полную информацию о посте по его ID",
+        "operationId": "PostsController_getPostById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "ID поста",
+            "schema": {
+              "example": "507f1f77bcf86cd799439011",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Детальная информация о посте",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пост не найден"
+          }
+        },
+        "summary": "Получить детальную информацию о посте",
+        "tags": [
+          "posts"
+        ]
+      }
     }
   },
   "info": {
@@ -722,6 +880,67 @@
           "changed"
         ]
       },
+      "ParseAllResultDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Общее количество найденных объявлений",
+            "example": 150
+          },
+          "parsed": {
+            "type": "number",
+            "description": "Количество успешно распарсенных автомобилей",
+            "example": 120
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Количество пропущенных объявлений (мотоциклы и т.д.)",
+            "example": 20
+          },
+          "errors": {
+            "type": "number",
+            "description": "Количество ошибок при парсинге",
+            "example": 10
+          },
+          "cars": {
+            "description": "Список распарсенных автомобилей",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Car"
+            }
+          },
+          "errorsList": {
+            "type": "array",
+            "description": "Список ошибок с URL объявлений",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": [
+              {
+                "url": "https://example.com/car1",
+                "error": "Failed to parse"
+              }
+            ]
+          }
+        },
+        "required": [
+          "total",
+          "parsed",
+          "skipped",
+          "errors",
+          "cars",
+          "errorsList"
+        ]
+      },
       "PaginationMetaDto": {
         "type": "object",
         "properties": {
@@ -879,6 +1098,107 @@
           "maxPrice",
           "minEngineVolume",
           "maxEngineVolume"
+        ]
+      },
+      "CreatePostDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Заголовок поста",
+            "example": "Новый автомобиль в продаже"
+          },
+          "text": {
+            "type": "string",
+            "description": "Текст поста",
+            "example": "Подробное описание автомобиля..."
+          },
+          "images": {
+            "description": "Массив ссылок на фотографии",
+            "example": [
+              "https://example.com/photo1.jpg",
+              "https://example.com/photo2.jpg"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string",
+            "description": "Ссылка на пост (опционально)",
+            "example": "https://example.com/post/123"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ]
+      },
+      "Post": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Заголовок поста",
+            "example": "Новый автомобиль в продаже"
+          },
+          "text": {
+            "type": "string",
+            "description": "Текст поста",
+            "example": "Подробное описание автомобиля..."
+          },
+          "images": {
+            "description": "Массив ссылок на фотографии",
+            "example": [
+              "https://example.com/photo1.jpg",
+              "https://example.com/photo2.jpg"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string",
+            "description": "Ссылка на пост (опционально)",
+            "example": "https://example.com/post/123"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Дата создания записи",
+            "example": "2024-01-01T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "title",
+          "text",
+          "createdAt"
+        ]
+      },
+      "PaginatedPostsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "description": "Массив постов",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Post"
+            }
+          },
+          "meta": {
+            "description": "Метаданные пагинации",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaginationMetaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "data",
+          "meta"
         ]
       }
     }
