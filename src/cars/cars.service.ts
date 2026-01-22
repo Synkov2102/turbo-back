@@ -397,12 +397,14 @@ export class CarsService {
       let eurUpdated = 0;
       let errors = 0;
 
-      // Находим все машины, у которых есть цена в USD или EUR
+      // Находим все машины, у которых есть цена в USD или EUR (в price или startingPrice)
       const carsWithCurrency = await this.carModel
         .find({
           $or: [
             { 'price.USD': { $exists: true, $ne: null, $gt: 0 } },
             { 'price.EUR': { $exists: true, $ne: null, $gt: 0 } },
+            { 'startingPrice.USD': { $exists: true, $ne: null, $gt: 0 } },
+            { 'startingPrice.EUR': { $exists: true, $ne: null, $gt: 0 } },
           ],
         })
         .exec();
@@ -416,13 +418,15 @@ export class CarsService {
         try {
           let rubPriceFromUsd = 0;
           let rubPriceFromEur = 0;
+          let rubStartingPriceFromUsd = 0;
+          let rubStartingPriceFromEur = 0;
 
           // Если есть цена в USD, пересчитываем в рубли
           if (car.price?.USD && car.price.USD > 0) {
             rubPriceFromUsd = Math.round(car.price.USD * rates.USD);
             usdUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: USD ${car.price.USD} -> RUB ${rubPriceFromUsd}`,
+              `Машина ${car._id}: price USD ${car.price.USD} -> RUB ${rubPriceFromUsd}`,
             );
           }
 
@@ -431,17 +435,54 @@ export class CarsService {
             rubPriceFromEur = Math.round(car.price.EUR * rates.EUR);
             eurUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: EUR ${car.price.EUR} -> RUB ${rubPriceFromEur}`,
+              `Машина ${car._id}: price EUR ${car.price.EUR} -> RUB ${rubPriceFromEur}`,
             );
           }
 
-          // Берем максимальную цену в рублях из доступных валют
-          const finalRubPrice = Math.max(rubPriceFromUsd, rubPriceFromEur);
+          // Если есть startingPrice в USD, пересчитываем в рубли
+          if (car.startingPrice?.USD && car.startingPrice.USD > 0) {
+            rubStartingPriceFromUsd = Math.round(
+              car.startingPrice.USD * rates.USD,
+            );
+            usdUpdated++;
+            this.logger.debug(
+              `Машина ${car._id}: startingPrice USD ${car.startingPrice.USD} -> RUB ${rubStartingPriceFromUsd}`,
+            );
+          }
 
+          // Если есть startingPrice в EUR, пересчитываем в рубли
+          if (car.startingPrice?.EUR && car.startingPrice.EUR > 0) {
+            rubStartingPriceFromEur = Math.round(
+              car.startingPrice.EUR * rates.EUR,
+            );
+            eurUpdated++;
+            this.logger.debug(
+              `Машина ${car._id}: startingPrice EUR ${car.startingPrice.EUR} -> RUB ${rubStartingPriceFromEur}`,
+            );
+          }
+
+          // Берем максимальную цену в рублях из доступных валют для price
+          const finalRubPrice = Math.max(rubPriceFromUsd, rubPriceFromEur);
+          // Берем максимальную цену в рублях из доступных валют для startingPrice
+          const finalRubStartingPrice = Math.max(
+            rubStartingPriceFromUsd,
+            rubStartingPriceFromEur,
+          );
+
+          // Формируем объект обновления
+          const updateData: any = {};
           if (finalRubPrice > 0) {
+            updateData['price.RUB'] = finalRubPrice;
+          }
+          if (finalRubStartingPrice > 0) {
+            updateData['startingPrice.RUB'] = finalRubStartingPrice;
+          }
+
+          // Обновляем машину, если есть что обновлять
+          if (Object.keys(updateData).length > 0) {
             await this.carModel.updateOne(
               { _id: car._id },
-              { $set: { 'price.RUB': finalRubPrice } },
+              { $set: updateData },
             );
             updated++;
           }

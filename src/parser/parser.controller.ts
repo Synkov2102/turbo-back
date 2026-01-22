@@ -18,6 +18,7 @@ import {
 import { AvitoParserService } from './avito-parser.service';
 import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
+import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 import { Car } from '../schemas/car.schema';
 import { ParseAvitoDto } from './dto/parse-avito.dto';
@@ -32,8 +33,9 @@ export class ParserController {
     private readonly avitoParserService: AvitoParserService,
     private readonly autoruParserService: AutoRuParserService,
     private readonly oldtimerfarmParserService: OldtimerfarmParserService,
+    private readonly rmsothebysParserService: RmsothebysParserService,
     private readonly statusCheckerService: StatusCheckerService,
-  ) {}
+  ) { }
 
   @Post('avito')
   @ApiOperation({
@@ -192,5 +194,110 @@ export class ParserController {
       listUrl ||
       'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen';
     return this.oldtimerfarmParserService.parseAllCarsFromList(url);
+  }
+
+  @Post('rmsothebys/parse')
+  @ApiOperation({
+    summary: "Распарсить конкретное объявление с RM Sotheby's и сохранить в базу данных",
+    description:
+      "Парсит одну ссылку с RM Sotheby's, извлекает все данные об автомобиле и сохраняет/обновляет запись в базе данных",
+  })
+  @ApiBody({ type: ParseAvitoDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Объявление успешно распарсено и сохранено',
+    type: Car,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверный URL',
+  })
+  async parseRmsothebysAd(@Body() dto: ParseAvitoDto): Promise<Car> {
+    return this.rmsothebysParserService.parseAndSave(dto.url);
+  }
+
+  @Post('rmsothebys')
+  @ApiOperation({
+    summary: "Распарсить объявление с RM Sotheby's и сохранить в базу данных",
+    deprecated: true,
+    description:
+      'Используйте /parser/rmsothebys/parse вместо этого эндпоинта',
+  })
+  @ApiBody({ type: ParseAvitoDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Объявление успешно распарсено и сохранено',
+    type: Car,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверный URL',
+  })
+  async parseRmsothebysAdOld(@Body() dto: ParseAvitoDto): Promise<Car> {
+    return this.rmsothebysParserService.parseAndSave(dto.url);
+  }
+
+  @Post('rmsothebys/parse-all')
+  @ApiOperation({
+    summary: "Глобальный парсинг всех автомобилей с RM Sotheby's",
+    description:
+      "Парсит все объявления со страницы поиска RM Sotheby's и сохраняет их в базу данных.",
+  })
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      properties: {
+        listUrl: {
+          type: 'string',
+          description: "URL страницы поиска RM Sotheby's",
+          example:
+            'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer',
+          default:
+            'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Результат глобального парсинга',
+    type: ParseAllResultDto,
+  })
+  async parseAllRmsothebysCars(
+    @Body('listUrl') listUrl?: string,
+  ): Promise<ParseAllResultDto> {
+    const url =
+      listUrl ||
+      'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer';
+
+    // Получаем все ссылки
+    const linksResult = await this.rmsothebysParserService.parseAllLinks(url);
+
+    // Парсим каждую ссылку
+    const result: ParseAllResultDto = {
+      total: linksResult.total,
+      parsed: 0,
+      skipped: 0,
+      errors: 0,
+      cars: [],
+      errorsList: [],
+    };
+
+    for (const linkUrl of linksResult.links) {
+      try {
+        const car = await this.rmsothebysParserService.parseAndSave(linkUrl);
+        result.cars.push(car);
+        result.parsed++;
+      } catch (error) {
+        result.errors++;
+        result.errorsList.push({
+          url: linkUrl,
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    return result;
   }
 }

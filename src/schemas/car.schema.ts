@@ -35,7 +35,7 @@ export class Car {
 
   @ApiProperty({
     description: 'Цена в разных валютах',
-    example: { RUB: 1500000, USD: 16000, EUR: 15000 },
+    example: { RUB: 1500000, USD: 16000, EUR: 15000, GBP: 12000 },
     required: false,
   })
   @Prop({
@@ -43,6 +43,7 @@ export class Car {
       RUB: { type: Number, required: false },
       USD: { type: Number, required: false },
       EUR: { type: Number, required: false },
+      GBP: { type: Number, required: false },
     },
     _id: false,
   })
@@ -50,6 +51,7 @@ export class Car {
     RUB?: number;
     USD?: number;
     EUR?: number;
+    GBP?: number;
   };
 
   @ApiProperty({
@@ -136,6 +138,44 @@ export class Car {
   })
   @Prop()
   lastChecked: Date;
+
+  @ApiProperty({
+    description: 'Тип объявления: аукцион или простое объявление',
+    example: 'auction',
+    enum: ['auction', 'listing'],
+    required: false,
+  })
+  @Prop({ enum: ['auction', 'listing'] })
+  listingType?: string;
+
+  @ApiProperty({
+    description: 'Дата аукциона (только для аукционов)',
+    example: '2024-03-15T00:00:00.000Z',
+    required: false,
+  })
+  @Prop()
+  auctionDate?: Date;
+
+  @ApiProperty({
+    description: 'Начальная цена (цена от) для аукционов',
+    example: { USD: 100000, EUR: 90000, GBP: 80000 },
+    required: false,
+  })
+  @Prop({
+    type: {
+      RUB: { type: Number, required: false },
+      USD: { type: Number, required: false },
+      EUR: { type: Number, required: false },
+      GBP: { type: Number, required: false },
+    },
+    _id: false,
+  })
+  startingPrice?: {
+    RUB?: number;
+    USD?: number;
+    EUR?: number;
+    GBP?: number;
+  };
 }
 
 export const CarSchema = SchemaFactory.createForClass(Car);
@@ -147,6 +187,7 @@ CarSchema.index({ year: 1 });
 CarSchema.index({ 'price.RUB': 1 });
 CarSchema.index({ 'price.USD': 1 });
 CarSchema.index({ 'price.EUR': 1 });
+CarSchema.index({ 'price.GBP': 1 });
 CarSchema.index({ 'location.city': 1 });
 CarSchema.index({ 'location.country': 1 });
 CarSchema.index({ transmission: 1 });
@@ -160,6 +201,11 @@ CarSchema.index({ brand: 1, model: 1 });
 CarSchema.index({ brand: 1, year: 1 });
 CarSchema.index({ 'location.city': 1, brand: 1 });
 CarSchema.index({ 'location.country': 1, 'location.city': 1 });
+CarSchema.index({ listingType: 1 });
+CarSchema.index({ auctionDate: 1 });
+CarSchema.index({ 'startingPrice.USD': 1 });
+CarSchema.index({ 'startingPrice.EUR': 1 });
+CarSchema.index({ 'startingPrice.GBP': 1 });
 
 // Disable version key to remove __v from documents
 CarSchema.set('versionKey', false);

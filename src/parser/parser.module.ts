@@ -5,19 +5,19 @@ import { AvitoParserService } from './avito-parser.service';
 import { Car, CarSchema } from '../schemas/car.schema';
 import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
+import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }]),
-  ],
+  imports: [MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }])],
   controllers: [ParserController],
   providers: [
     AvitoParserService,
     AutoRuParserService,
     OldtimerfarmParserService,
+    RmsothebysParserService,
     StatusCheckerService,
   ],
   exports: [StatusCheckerService],
 })
-export class ParserModule {}
+export class ParserModule { }
