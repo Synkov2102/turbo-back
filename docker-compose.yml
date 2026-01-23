@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: turbo-back
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/scraper}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - PROXY=${PROXY:-}
+      - PROXY_LIST=${PROXY_LIST:-}
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+    networks:
+      - turbo-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+  mongo:
+    image: mongo:7
+    container_name: turbo-back-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - turbo-network
+    environment:
+      - MONGO_INITDB_DATABASE=scraper
+
+volumes:
+  mongo-data:
+
+networks:
+  turbo-network:
+    driver: bridge
+

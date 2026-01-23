@@ -59,16 +59,77 @@ $ npm run test:cov
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Docker
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Приложение готово к деплою через Docker. Для сборки и запуска:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Сборка образа
+docker build -t turbo-back .
+
+# Запуск контейнера
+docker run -d \
+  -p 3001:3001 \
+  -e MONGO_URI=mongodb://host.docker.internal:27017/scraper \
+  -e CORS_ORIGINS=https://yourdomain.com \
+  --name turbo-back \
+  turbo-back
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Переменные окружения
+
+Скопируйте `env.example` в `.env` и настройте переменные:
+
+- `PORT` - порт приложения (по умолчанию 3001)
+- `MONGO_URI` - URI подключения к MongoDB
+- `CORS_ORIGINS` - разрешенные источники через запятую
+- `PROXY` или `PROXY_LIST` - прокси для парсинга (опционально)
+
+### GitHub Actions CI/CD
+
+Проект настроен с автоматическим деплоем через GitHub Actions:
+
+- **CI** (`.github/workflows/ci.yml`) - запускается на каждый PR и push:
+  - Линтинг кода
+  - Сборка приложения
+  - Проверка Docker образа
+
+- **Deploy** (`.github/workflows/deploy.yml`) - запускается при push в `main`/`master`:
+  - Сборка Docker образа
+  - Публикация в GitHub Container Registry
+  - Автоматический деплой на продакшн
+
+#### Настройка деплоя
+
+1. Образ автоматически публикуется в GitHub Container Registry: `ghcr.io/synkov2102/turbo-back:latest`
+
+2. Для настройки деплоя на ваш сервер, отредактируйте `.github/workflows/deploy.yml` в секции `deploy`:
+   - Добавьте SSH ключи в GitHub Secrets
+   - Настройте команды для обновления контейнера на сервере
+   - Или используйте docker-compose для управления
+
+Пример настройки для SSH деплоя:
+```yaml
+- name: Deploy to production
+  uses: appleboy/ssh-action@master
+  with:
+    host: ${{ secrets.SSH_HOST }}
+    username: ${{ secrets.SSH_USERNAME }}
+    key: ${{ secrets.SSH_KEY }}
+    script: |
+      cd /opt/turbo-back
+      docker pull ghcr.io/synkov2102/turbo-back:latest
+      docker-compose up -d
+```
+
+### Production Checklist
+
+- [ ] Настроить переменные окружения на сервере
+- [ ] Настроить MongoDB на продакшн
+- [ ] Настроить CORS_ORIGINS для фронтенда
+- [ ] Настроить прокси (если необходимо)
+- [ ] Настроить мониторинг и логирование
+- [ ] Настроить резервное копирование базы данных
 
 ## Resources
 
