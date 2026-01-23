@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup SSH key
-        if: secrets.VPS_SSH_KEY_B64
+        if: ${{ secrets.VPS_SSH_KEY_B64 != '' }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_rsa
@@ -70,7 +70,7 @@ jobs:
           ssh-keyscan -H ${{ secrets.VPS_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy to production
-        if: secrets.VPS_SSH_KEY_B64
+        if: ${{ secrets.VPS_SSH_KEY_B64 != '' }}
         run: |
           echo "🚀 Deploying to production..."
           echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
