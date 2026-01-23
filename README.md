@@ -69,7 +69,7 @@ docker build -t turbo-back .
 
 # Запуск контейнера
 docker run -d \
-  -p 3001:3001 \
+  -p 3002:3002 \
   -e MONGO_URI=mongodb://host.docker.internal:27017/scraper \
   -e CORS_ORIGINS=https://yourdomain.com \
   --name turbo-back \
@@ -80,7 +80,7 @@ docker run -d \
 
 Скопируйте `env.example` в `.env` и настройте переменные:
 
-- `PORT` - порт приложения (по умолчанию 3001)
+- `PORT` - порт приложения (по умолчанию 3002)
 - `MONGO_URI` - URI подключения к MongoDB
 - `CORS_ORIGINS` - разрешенные источники через запятую
 - `PROXY` или `PROXY_LIST` - прокси для парсинга (опционально)

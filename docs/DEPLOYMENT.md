@@ -13,7 +13,7 @@ MONGO_URI=mongodb://mongo:27017/scraper
 CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
 
-> **Примечание:** `PORT` - это внешний порт на хосте (по умолчанию 3002). Внутри контейнера приложение всегда работает на порту 3001.
+> **Примечание:** `PORT` - это внешний порт на хосте (по умолчанию 3002). Внутри контейнера приложение всегда работает на порту 3002.
 
 ### 2. Настройка GitHub Secrets
 
@@ -114,7 +114,7 @@ docker-compose ps
 docker-compose logs -f app
 
 # Healthcheck
-curl http://localhost:3001/api
+curl http://localhost:3002/api
 ```
 
 ## Обновление приложения

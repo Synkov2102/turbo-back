@@ -6,15 +6,15 @@
 
 Swagger автоматически предоставляет JSON спецификацию по следующим адресам:
 
-- **JSON формат**: `http://localhost:3001/api-json`
-- **YAML формат**: `http://localhost:3001/api-yaml`
-- **Swagger UI**: `http://localhost:3001/api`
+- **JSON формат**: `http://localhost:3002/api-json`
+- **YAML формат**: `http://localhost:3002/api-yaml`
+- **Swagger UI**: `http://localhost:3002/api`
 
 #### Использование на фронтенде:
 
 ```typescript
 // Получить спецификацию
-const response = await fetch('http://localhost:3001/api-json');
+const response = await fetch('http://localhost:3002/api-json');
 const openApiSpec = await response.json();
 ```
 
@@ -42,7 +42,7 @@ npm install -g @openapitools/openapi-generator-cli
 
 # Сгенерировать клиент
 openapi-generator-cli generate \
-  -i http://localhost:3001/api-json \
+  -i http://localhost:3002/api-json \
   -g typescript-axios \
   -o ./frontend/src/api
 ```
@@ -54,7 +54,7 @@ openapi-generator-cli generate \
 npm install --save-dev openapi-typescript-codegen
 
 # Сгенерировать клиент
-npx openapi-typescript-codegen --input http://localhost:3001/api-json --output ./frontend/src/api
+npx openapi-typescript-codegen --input http://localhost:3002/api-json --output ./frontend/src/api
 ```
 
 #### Используя swagger-typescript-api:
@@ -64,7 +64,7 @@ npx openapi-typescript-codegen --input http://localhost:3001/api-json --output .
 npm install -g swagger-typescript-api
 
 # Сгенерировать клиент
-swagger-typescript-api -p http://localhost:3001/api-json -o ./frontend/src/api -n api.ts
+swagger-typescript-api -p http://localhost:3002/api-json -o ./frontend/src/api -n api.ts
 ```
 
 ### 4. Использование в Cursor/IDE
@@ -73,7 +73,7 @@ swagger-typescript-api -p http://localhost:3001/api-json -o ./frontend/src/api -
 
 1. **Скопируйте URL спецификации**:
    ```
-   http://localhost:3001/api-json
+   http://localhost:3002/api-json
    ```
 
 2. **Или скопируйте содержимое файла** `openapi.json` после генерации
@@ -92,7 +92,7 @@ swagger-typescript-api -p http://localhost:3001/api-json -o ./frontend/src/api -
 // lib/api-client.ts
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
 // Загрузить спецификацию
 export async function getOpenApiSpec() {
@@ -110,7 +110,7 @@ export async function getOpenApiSpec() {
 import axios from 'axios';
 
 export async function fetchOpenApiSpec() {
-  const { data } = await axios.get('http://localhost:3001/api-json');
+  const { data } = await axios.get('http://localhost:3002/api-json');
   return data;
 }
 ```
