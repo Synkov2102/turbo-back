@@ -109,7 +109,7 @@ jobs:
               sed -i 's/\${PORT:-3001}:3001/\${PORT:-3002}:3001/g' docker-compose.prod.yml || true
               sed -i 's/"3001:3001"/"3002:3001"/g' docker-compose.prod.yml || true
               sed -i 's/3001:3001/3002:3001/g' docker-compose.prod.yml || true
-              # Проверяем результат
+          
               if grep -q "3001:3001" docker-compose.prod.yml; then
                 echo "⚠️  Warning: docker-compose.prod.yml still contains 3001:3001"
                 echo "Current ports config:"
