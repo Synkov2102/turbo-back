@@ -4,7 +4,7 @@ services:
     container_name: turbo-back
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:3001"
+      - "${PORT:-3002}:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
