@@ -102,6 +102,20 @@ jobs:
             # Останавливаем контейнеры, использующие порт 3002 (наш бэкенд)
             docker ps --format "{{.ID}} {{.Ports}}" | grep ":3002->" | awk '{print \$1}' | xargs -r docker stop 2>/dev/null || true
             docker ps -a --format "{{.ID}} {{.Ports}}" | grep ":3002->" | awk '{print \$1}' | xargs -r docker rm -f 2>/dev/null || true
+            echo "📝 Ensuring docker-compose.prod.yml uses port 3002..."
+            # Обновляем docker-compose.prod.yml если там старый порт
+            if [ -f docker-compose.prod.yml ]; then
+              # Заменяем все варианты старого порта на новый
+              sed -i 's/\${PORT:-3001}:3001/\${PORT:-3002}:3001/g' docker-compose.prod.yml || true
+              sed -i 's/"3001:3001"/"3002:3001"/g' docker-compose.prod.yml || true
+              sed -i 's/3001:3001/3002:3001/g' docker-compose.prod.yml || true
+              # Проверяем результат
+              if grep -q "3001:3001" docker-compose.prod.yml; then
+                echo "⚠️  Warning: docker-compose.prod.yml still contains 3001:3001"
+                echo "Current ports config:"
+                grep -A 2 "ports:" docker-compose.prod.yml || true
+              fi
+            fi
             echo "📥 Pulling latest image..."
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             echo "🔄 Updating containers..."
