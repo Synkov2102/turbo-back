@@ -190,6 +190,38 @@ Puppeteer может потреблять много памяти. Если ко
 - Настройте ограничения для Puppeteer
 - Используйте headless режим (уже включен по умолчанию)
 
+### Проблемы с SSH соединением при деплое
+
+Если при деплое через GitHub Actions происходит разрыв SSH соединения (`Broken pipe`):
+
+1. **Настройте SSH на сервере** для предотвращения таймаутов:
+   ```bash
+   # На сервере отредактируйте /etc/ssh/sshd_config
+   sudo nano /etc/ssh/sshd_config
+   
+   # Добавьте или измените следующие параметры:
+   ClientAliveInterval 60
+   ClientAliveCountMax 3
+   TCPKeepAlive yes
+   
+   # Перезапустите SSH сервис
+   sudo systemctl restart sshd
+   ```
+
+2. **Настройте SSH клиент** в GitHub Actions workflow (если используете):
+   ```yaml
+   ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no ...
+   ```
+
+3. **Используйте улучшенный скрипт deploy.sh** - он включает повторные попытки загрузки образа
+
+4. **Альтернатива**: Загрузите образ вручную на сервере, затем запустите скрипт:
+   ```bash
+   # На сервере
+   docker pull ghcr.io/synkov2102/turbo-back:latest
+   ./deploy.sh
+   ```
+
 ## Безопасность
 
 1. **Никогда не коммитьте `.env` файлы** в репозиторий

@@ -13,28 +13,72 @@ FULL_IMAGE="${IMAGE_NAME}:${TAG}"
 echo "🚀 Начинаем деплой ${FULL_IMAGE}"
 
 # Проверяем наличие docker-compose
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ docker-compose не найден. Установите docker-compose."
+if ! command -v docker-compose &> /dev/null && ! command -v docker &> /dev/null; then
+    echo "❌ docker-compose или docker не найден. Установите docker."
+    exit 1
+fi
+
+# Определяем команду для docker-compose (v1 или v2)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+elif docker compose version &>/dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+else
+    echo "❌ Не найдена команда docker-compose"
     exit 1
 fi
 
 # Останавливаем старый контейнер
 echo "⏹️  Останавливаем старый контейнер..."
-docker-compose down || true
+$DOCKER_COMPOSE_CMD -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 
-# Обновляем образ
+# Останавливаем контейнеры, использующие порт 3002
+echo "🛑 Останавливаем контейнеры на порту 3002..."
+docker ps --format "{{.ID}} {{.Ports}}" | grep ":3002->" | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+docker ps -a --format "{{.ID}} {{.Ports}}" | grep ":3002->" | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+
+# Обновляем образ с повторными попытками
 echo "📥 Загружаем новый образ..."
-docker pull ${FULL_IMAGE}
+MAX_RETRIES=3
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if docker pull ${FULL_IMAGE}; then
+        echo "✅ Образ успешно загружен"
+        break
+    else
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⚠️  Попытка $RETRY_COUNT не удалась, повторяем через 5 секунд..."
+            sleep 5
+        else
+            echo "❌ Не удалось загрузить образ после $MAX_RETRIES попыток"
+            exit 1
+        fi
+    fi
+done
 
-# Обновляем docker-compose.yml с новым образом
+# Обновляем docker-compose.prod.yml с новым образом
 if [ -f docker-compose.prod.yml ]; then
-    # Если есть продакшн конфиг, используем его
+    echo "📝 Обновляем docker-compose.prod.yml..."
     sed -i "s|image:.*|image: ${FULL_IMAGE}|g" docker-compose.prod.yml
-    docker-compose -f docker-compose.prod.yml up -d
+    
+    # Убеждаемся, что используется порт 3002
+    sed -i 's/\${PORT:-3001}:3001/\${PORT:-3002}:3002/g' docker-compose.prod.yml || true
+    sed -i 's/"3001:3001"/"${PORT:-3002}:3002"/g' docker-compose.prod.yml || true
+    sed -i 's/3001:3001/3002:3002/g' docker-compose.prod.yml || true
+    sed -i 's/PORT=3001/PORT=3002/g' docker-compose.prod.yml || true
+    
+    echo "🔄 Запускаем контейнеры..."
+    $DOCKER_COMPOSE_CMD -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
 else
-    # Иначе обновляем основной файл
-    sed -i "s|image:.*|image: ${FULL_IMAGE}|g" docker-compose.yml
-    docker-compose up -d
+    echo "⚠️  docker-compose.prod.yml не найден, используем docker-compose.yml"
+    if [ -f docker-compose.yml ]; then
+        sed -i "s|image:.*|image: ${FULL_IMAGE}|g" docker-compose.yml
+        $DOCKER_COMPOSE_CMD -f docker-compose.yml up -d --force-recreate --remove-orphans
+    else
+        echo "❌ Не найден ни docker-compose.prod.yml, ни docker-compose.yml"
+        exit 1
+    fi
 fi
 
 # Очищаем старые образы
@@ -43,5 +87,5 @@ docker image prune -f
 
 echo "✅ Деплой завершен!"
 echo "📊 Статус контейнеров:"
-docker-compose ps
+$DOCKER_COMPOSE_CMD -f docker-compose.prod.yml ps 2>/dev/null || $DOCKER_COMPOSE_CMD ps
 
