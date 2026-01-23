@@ -1,5 +1,3 @@
-import { Car } from '../../schemas/car.schema';
-
 /**
  * Интерфейс для пагинированного ответа
  */

@@ -426,7 +426,7 @@ export class CarsService {
             rubPriceFromUsd = Math.round(car.price.USD * rates.USD);
             usdUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: price USD ${car.price.USD} -> RUB ${rubPriceFromUsd}`,
+              `Машина ${String(car._id)}: price USD ${car.price.USD} -> RUB ${rubPriceFromUsd}`,
             );
           }
 
@@ -435,7 +435,7 @@ export class CarsService {
             rubPriceFromEur = Math.round(car.price.EUR * rates.EUR);
             eurUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: price EUR ${car.price.EUR} -> RUB ${rubPriceFromEur}`,
+              `Машина ${String(car._id)}: price EUR ${car.price.EUR} -> RUB ${rubPriceFromEur}`,
             );
           }
 
@@ -446,7 +446,7 @@ export class CarsService {
             );
             usdUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: startingPrice USD ${car.startingPrice.USD} -> RUB ${rubStartingPriceFromUsd}`,
+              `Машина ${String(car._id)}: startingPrice USD ${car.startingPrice.USD} -> RUB ${rubStartingPriceFromUsd}`,
             );
           }
 
@@ -457,7 +457,7 @@ export class CarsService {
             );
             eurUpdated++;
             this.logger.debug(
-              `Машина ${car._id}: startingPrice EUR ${car.startingPrice.EUR} -> RUB ${rubStartingPriceFromEur}`,
+              `Машина ${String(car._id)}: startingPrice EUR ${car.startingPrice.EUR} -> RUB ${rubStartingPriceFromEur}`,
             );
           }
 
@@ -489,7 +489,7 @@ export class CarsService {
         } catch (error) {
           errors++;
           this.logger.error(
-            `Ошибка при обновлении машины ${car._id}: ${(error as Error).message}`,
+            `Ошибка при обновлении машины ${String(car._id)}: ${(error as Error).message}`,
           );
         }
       }

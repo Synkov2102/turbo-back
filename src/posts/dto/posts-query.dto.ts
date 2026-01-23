@@ -28,8 +28,3 @@ export class PostsQueryDto {
   limit?: number;
 }
 
-
-
-
-
-

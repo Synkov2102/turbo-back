@@ -44,7 +44,7 @@ export class CbrService {
         },
       });
 
-      return await this.parseXmlResponse(response.data);
+      return await this.parseXmlResponse(String(response.data));
     } catch (error) {
       this.logger.error(
         `Ошибка при получении курсов валют: ${(error as Error).message}`,
