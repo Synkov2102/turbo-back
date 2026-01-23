@@ -7,11 +7,13 @@
 Создайте файл `.env` на сервере на основе `env.example`:
 
 ```bash
-PORT=3001
+PORT=8080
 NODE_ENV=production
 MONGO_URI=mongodb://mongo:27017/scraper
 CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
+
+> **Примечание:** `PORT` - это внешний порт на хосте. Внутри контейнера приложение всегда работает на порту 3001.
 
 ### 2. Настройка GitHub Secrets
 
