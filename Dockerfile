@@ -12,8 +12,7 @@ WORKDIR /app
 
 # Копируем файлы зависимостей
 COPY package*.json ./
-COPY tsconfig*.json ./
-COPY nest-cli.json ./
+COPY tsconfig*.json nest-cli.json ./
 
 # Устанавливаем зависимости
 RUN npm ci
@@ -72,16 +71,15 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Открываем порт
-EXPOSE 3001
+EXPOSE 3002
 
 # Переменные окружения по умолчанию
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=3002
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/api', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:3002/api', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
 # Запуск приложения
-CMD ["node", "dist/main.js"]
-
+CMD ["node", "dist/src/main.js"]
