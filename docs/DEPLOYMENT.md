@@ -59,122 +59,91 @@ cat ~/.ssh/id_rsa | base64
    - Опубликован в GitHub Container Registry
    - Задеплоен на сервер через SSH
 
-### Вариант 2: Ручной деплой через Docker
-
-На сервере:
+### Вариант 2: Ручной деплой через скрипт deploy.sh
 
 ```bash
-# Клонируйте репозиторий
-git clone https://github.com/Synkov2102/turbo-back.git
-cd turbo-back
-
-# Создайте .env файл
-cp env.example .env
-nano .env  # Настройте переменные
-
-# Соберите и запустите
-docker-compose up -d
-```
-
-### Вариант 3: Деплой готового образа
-
-```bash
-# На сервере создайте директорию
+# На сервере
 mkdir -p /opt/turbo-back
 cd /opt/turbo-back
 
-# Создайте docker-compose.prod.yml (скопируйте из репозитория)
-# Создайте .env файл
-
-# Запустите деплой скрипт
+# Скопируйте docker-compose.prod.yml и создайте .env файл
+# Скачайте скрипт деплоя
 curl -o deploy.sh https://raw.githubusercontent.com/Synkov2102/turbo-back/main/deploy.sh
 chmod +x deploy.sh
-./deploy.sh
-```
 
-### Вариант 4: Использование скрипта deploy.sh
-
-1. Скопируйте `deploy.sh` на сервер
-2. Настройте переменную окружения `GITHUB_REPOSITORY` (например, `Synkov2102/turbo-back`)
-3. Запустите:
-
-```bash
+# Запустите деплой
 ./deploy.sh latest  # или конкретный тег
 ```
 
-## Проверка деплоя
-
-После деплоя проверьте:
-
-```bash
-# Статус контейнеров
-docker-compose ps
-
-# Логи приложения
-docker-compose logs -f app
-
-# Healthcheck
-curl http://localhost:3002/api
-```
-
-## Обновление приложения
-
-### Автоматическое обновление
-
-При push в `main`/`master` обновление происходит автоматически через GitHub Actions.
-
-### Ручное обновление
+### Вариант 3: Ручной деплой через docker-compose
 
 ```bash
 # На сервере
 cd /opt/turbo-back
 docker pull ghcr.io/synkov2102/turbo-back:latest
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## Проверка и обновление
+
+### Проверка деплоя
+
+```bash
+# Статус контейнеров
+docker compose -f docker-compose.prod.yml ps
+
+# Логи приложения
+docker compose -f docker-compose.prod.yml logs -f app
+
+# Healthcheck
+curl http://localhost:3002/api
+```
+
+### Обновление
+
+**Автоматическое:** При push в `main`/`master` через GitHub Actions
+
+**Ручное:**
+```bash
+cd /opt/turbo-back
+./deploy.sh  # или docker compose -f docker-compose.prod.yml up -d --pull always
 ```
 
 ## Мониторинг
 
-### Логи
-
 ```bash
-# Просмотр логов
-docker-compose logs -f app
+# Логи
+docker compose -f docker-compose.prod.yml logs -f app
+docker compose -f docker-compose.prod.yml logs --tail=100 app
 
-# Последние 100 строк
-docker-compose logs --tail=100 app
+# Статистика
+docker stats turbo-back
+
+# Healthcheck (встроенный, проверка каждые 30 сек)
 ```
 
-### Healthcheck
-
-Приложение имеет встроенный healthcheck, который проверяет доступность API каждые 30 секунд.
-
-### Метрики
-
-Для мониторинга можно использовать:
-- Docker stats: `docker stats turbo-back`
-- Prometheus + Grafana
-- Логирование в внешний сервис (ELK, Loki и т.д.)
+Для продвинутого мониторинга: Prometheus + Grafana, ELK, Loki
 
 ## Откат к предыдущей версии
 
 ```bash
-# Список доступных тегов
-docker images | grep turbo-back
-
 # Откат к конкретной версии
-docker pull ghcr.io/synkov2102/turbo-back:main-abc1234
-docker tag ghcr.io/synkov2102/turbo-back:main-abc1234 ghcr.io/synkov2102/turbo-back:latest
-docker-compose -f docker-compose.prod.yml up -d
+./deploy.sh main-abc1234  # или другой тег
 ```
 
 ## Устранение проблем
 
 ### Контейнер не запускается
 
-1. Проверьте логи: `docker-compose logs app`
-2. Проверьте переменные окружения: `docker-compose config`
-3. Проверьте подключение к MongoDB
-4. Проверьте доступность портов
+```bash
+# Проверка логов
+docker compose -f docker-compose.prod.yml logs app
+
+# Проверка конфигурации
+docker compose -f docker-compose.prod.yml config
+
+# Проверка подключения к MongoDB и портов
+```
 
 ### Проблемы с Puppeteer
 
