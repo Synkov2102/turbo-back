@@ -7,9 +7,14 @@ import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { StatusCheckerService } from './status-checker.service';
+import { CronParserService } from './cron-parser.service';
+import { CarsModule } from '../cars/cars.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }])],
+  imports: [
+    MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }]),
+    CarsModule,
+  ],
   controllers: [ParserController],
   providers: [
     AvitoParserService,
@@ -17,6 +22,7 @@ import { StatusCheckerService } from './status-checker.service';
     OldtimerfarmParserService,
     RmsothebysParserService,
     StatusCheckerService,
+    CronParserService,
   ],
   exports: [StatusCheckerService],
 })

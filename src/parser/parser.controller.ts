@@ -20,11 +20,11 @@ import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { StatusCheckerService } from './status-checker.service';
+import { CronParserService } from './cron-parser.service';
 import { Car } from '../schemas/car.schema';
 import { ParseAvitoDto } from './dto/parse-avito.dto';
 import { StatusCheckResultDto } from './dto/status-check-result.dto';
 import { StatusCheckResult } from './interfaces/status-check-result.interface';
-import { ParseAllResultDto } from './dto/parse-all-result.dto';
 
 @ApiTags('parser')
 @Controller('parser')
@@ -35,7 +35,8 @@ export class ParserController {
     private readonly oldtimerfarmParserService: OldtimerfarmParserService,
     private readonly rmsothebysParserService: RmsothebysParserService,
     private readonly statusCheckerService: StatusCheckerService,
-  ) { }
+    private readonly cronParserService: CronParserService,
+  ) {}
 
   @Post('avito')
   @ApiOperation({
@@ -162,38 +163,17 @@ export class ParserController {
 
   @Post('oldtimerfarm/parse-all')
   @ApiOperation({
-    summary: 'Глобальный парсинг всех автомобилей со страницы Oldtimerfarm',
+    summary: 'Парсинг Oldtimerfarm',
     description:
-      'Парсит все объявления со страницы списка Oldtimerfarm, определяет тип транспорта и парсит только автомобили (пропускает мотоциклы).',
-  })
-  @ApiBody({
-    required: false,
-    schema: {
-      type: 'object',
-      properties: {
-        listUrl: {
-          type: 'string',
-          description: 'URL страницы со списком объявлений',
-          example:
-            'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen',
-          default:
-            'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen',
-        },
-      },
-    },
+      'Парсит актуальные объявления с Oldtimerfarm: обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Результат глобального парсинга',
-    type: ParseAllResultDto,
+    description: 'Парсинг завершен',
   })
-  async parseAllOldtimerfarmCars(
-    @Body('listUrl') listUrl?: string,
-  ): Promise<ParseAllResultDto> {
-    const url =
-      listUrl ||
-      'https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen';
-    return this.oldtimerfarmParserService.parseAllCarsFromList(url);
+  async parseAllOldtimerfarmCars(): Promise<{ message: string }> {
+    await this.cronParserService.parseOldtimerfarm();
+    return { message: 'Парсинг Oldtimerfarm завершен' };
   }
 
   @Post('rmsothebys/parse')
@@ -239,65 +219,31 @@ export class ParserController {
 
   @Post('rmsothebys/parse-all')
   @ApiOperation({
-    summary: "Глобальный парсинг всех автомобилей с RM Sotheby's",
+    summary: "Парсинг RM Sotheby's",
     description:
-      "Парсит все объявления со страницы поиска RM Sotheby's и сохраняет их в базу данных.",
-  })
-  @ApiBody({
-    required: false,
-    schema: {
-      type: 'object',
-      properties: {
-        listUrl: {
-          type: 'string',
-          description: "URL страницы поиска RM Sotheby's",
-          example:
-            'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer',
-          default:
-            'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer',
-        },
-      },
-    },
+      "Парсит актуальные объявления с RM Sotheby's: обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.",
   })
   @ApiResponse({
     status: 200,
-    description: 'Результат глобального парсинга',
-    type: ParseAllResultDto,
+    description: 'Парсинг завершен',
   })
-  async parseAllRmsothebysCars(
-    @Body('listUrl') listUrl?: string,
-  ): Promise<ParseAllResultDto> {
-    const url =
-      listUrl ||
-      'https://rmsothebys.com/search#?SortBy=Availability&CategoryTag=All%20Motor%20Vehicles&page=1&pageSize=40&OfferStatus=On%20Offer';
+  async parseAllRmsothebysCars(): Promise<{ message: string }> {
+    await this.cronParserService.parseRmsothebys();
+    return { message: "Парсинг RM Sotheby's завершен" };
+  }
 
-    // Получаем все ссылки
-    const linksResult = await this.rmsothebysParserService.parseAllLinks(url);
-
-    // Парсим каждую ссылку
-    const result: ParseAllResultDto = {
-      total: linksResult.total,
-      parsed: 0,
-      skipped: 0,
-      errors: 0,
-      cars: [],
-      errorsList: [],
-    };
-
-    for (const linkUrl of linksResult.links) {
-      try {
-        const car = await this.rmsothebysParserService.parseAndSave(linkUrl);
-        result.cars.push(car);
-        result.parsed++;
-      } catch (error) {
-        result.errors++;
-        result.errorsList.push({
-          url: linkUrl,
-          error: (error as Error).message,
-        });
-      }
-    }
-
-    return result;
+  @Post('parse-full-cycle')
+  @ApiOperation({
+    summary: 'Полный цикл парсинга',
+    description:
+      'Парсинг Oldtimerfarm, парсинг RM Sothebys, обновление цен в рублях. Обновляет существующие, добавляет новые, помечает отсутствующие как removed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Полный цикл парсинга завершен',
+  })
+  async runFullParseCycle(): Promise<{ message: string }> {
+    await this.cronParserService.runFullParseCycle();
+    return { message: 'Полный цикл парсинга завершен' };
   }
 }

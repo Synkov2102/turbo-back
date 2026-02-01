@@ -147,12 +147,28 @@ export class OldtimerfarmParserService {
       }
 
       // ---------- Извлечение данных из спецификаций ----------
-      const make = (specifications?.Make as string) || '';
+      let make = (specifications?.Make as string) || '';
       let model = (specifications?.Model as string) || '';
       // Убираем год из модели (например, '71 или 71)
       model = model.replace(/\s*['']?\d{2}\s*$/, '').trim();
       const yearText = (specifications?.['Construction year'] as string) || '';
       const year = yearText ? parseInt(yearText, 10) || 0 : 0;
+
+      // Если бренда нет в спецификациях: из заголовка — первое слово после года = бренд, остальное = модель
+      if (!make && title) {
+        const yearMatchTitle = title.match(/\b(19|20)\d{2}\b/);
+        let textAfterYear = title;
+        if (yearMatchTitle) {
+          textAfterYear = title.replace(yearMatchTitle[0], '').trim();
+        }
+        const parts = textAfterYear.split(/\s+/).filter((p) => p);
+        if (parts.length >= 1) {
+          make = parts[0];
+          if (parts.length >= 2 && !model) {
+            model = parts.slice(1).join(' ').replace(/\s*['']?\d{2}\s*$/, '').trim();
+          }
+        }
+      }
       const mileageText = (specifications?.KM as string) || '';
       const mileage = mileageText
         ? parseInt(mileageText.replace(/[^\d]/g, ''), 10) || 0

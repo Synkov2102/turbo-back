@@ -882,7 +882,7 @@ export class RmsothebysParserService {
   }
 
   /**
-   * Извлекает описание
+   * Извлекает описание с сохранением абзацев (через innerText или сбор по блокам p/div)
    */
   private async extractDescription(page: any): Promise<string> {
     return await page.evaluate(() => {
@@ -895,13 +895,32 @@ export class RmsothebysParserService {
       ];
 
       for (const selector of descriptionSelectors) {
-        const element = document.querySelector(selector);
-        if (element) {
-          const text = element.textContent?.trim();
-          if (text && text.length > 50) {
-            return text;
+        const container = document.querySelector(selector);
+        if (!container) continue;
+
+        const rawText = container.textContent?.trim();
+        if (!rawText || rawText.length <= 50) continue;
+
+        // innerText в браузере сохраняет переносы строк между блоками (p, div и т.д.)
+        const withBreaks = (container as HTMLElement).innerText?.trim();
+        if (withBreaks && withBreaks.length > 50) {
+          return withBreaks.replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        // Fallback: собираем текст по прямым блочным потомкам контейнера
+        const blockTags = ['P', 'DIV', 'H2', 'H3', 'H4', 'LI'];
+        const parts: string[] = [];
+        for (const child of container.children) {
+          if (blockTags.includes(child.tagName)) {
+            const t = child.textContent?.trim();
+            if (t) parts.push(t);
           }
         }
+        if (parts.length > 0) {
+          return parts.join('\n\n');
+        }
+
+        return rawText;
       }
 
       return '';
@@ -1111,6 +1130,22 @@ export class RmsothebysParserService {
               data.model = modelText;
             }
             break;
+          }
+        }
+
+        // Если бренда нет в списке: первое слово после года — бренд, остальное — модель
+        if (!data.brand) {
+          let textAfterYear = title;
+          if (yearMatch) {
+            textAfterYear = title.replace(yearMatch[0], '').trim();
+          }
+          textAfterYear = textAfterYear.replace(/\s*\|\s*.*$/, '').trim();
+          const parts = textAfterYear.split(/\s+/).filter((p) => p);
+          if (parts.length >= 1) {
+            data.brand = parts[0];
+            if (parts.length >= 2) {
+              data.model = parts.slice(1).join(' ');
+            }
           }
         }
       }
