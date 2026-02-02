@@ -59,6 +59,11 @@ RUN apt-get update && apt-get install -y \
 # Настройка переменных окружения для Puppeteer (использование системного Chromium)
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Crashpad в Docker требует записываемый каталог для --database
+ENV TMPDIR=/tmp
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV XDG_CONFIG_HOME=/tmp/.config
 
 WORKDIR /app
 
@@ -74,6 +79,8 @@ COPY --from=builder /app/dist ./dist
 # Создаем пользователя для безопасности
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN chown -R appuser:appuser /app
+# Каталоги для Chromium/crashpad (должны существовать и быть записываемыми)
+RUN mkdir -p /tmp/.cache /tmp/.config && chown -R appuser:appuser /tmp/.cache /tmp/.config
 USER appuser
 
 # Открываем порт

@@ -147,6 +147,7 @@ export function getBaseLaunchOptions(
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
+    '--disable-crashpad-for-testing',
     '--disable-crash-reporter',
     '--disable-breakpad',
     ...additionalArgs,
@@ -221,6 +222,7 @@ export async function createBrowser(
     '--start-maximized',
     `--user-agent=${userAgent}`,
     // Отключаем crashpad в Docker (chrome_crashpad_handler: --database is required)
+    '--disable-crashpad-for-testing',
     '--disable-crash-reporter',
     '--disable-breakpad',
     '--disable-background-networking',
@@ -253,6 +255,16 @@ export async function createBrowser(
     headless,
     defaultViewport: null,
     args,
+    // В Docker crashpad требует записываемый каталог для --database; задаём HOME/TMP/XDG
+    env: {
+      ...process.env,
+      TMPDIR: '/tmp',
+      TEMP: '/tmp',
+      TMP: '/tmp',
+      HOME: process.env.HOME || '/tmp',
+      XDG_CACHE_HOME: '/tmp/.cache',
+      XDG_CONFIG_HOME: '/tmp/.config',
+    },
   };
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
