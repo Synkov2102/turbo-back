@@ -125,6 +125,56 @@ export function randomDelay(
 }
 
 /**
+ * Получает базовые опции запуска Puppeteer с учетом системного Chromium (для Docker)
+ */
+export function getBaseLaunchOptions(
+  headless: boolean = false,
+  additionalArgs: string[] = [],
+): Parameters<typeof PuppeteerExtra.launch>[0] {
+  const args = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    ...additionalArgs,
+  ];
+
+  const options: Parameters<typeof PuppeteerExtra.launch>[0] = {
+    headless,
+    defaultViewport: null,
+    args,
+  };
+
+  // Используем системный Chromium, если указан в переменной окружения (для Docker)
+  // Или пытаемся найти его автоматически
+  let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (!executablePath) {
+    // Пробуем стандартные пути для Chromium в Linux
+    const fs = require('fs');
+    const possiblePaths = [
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+    ];
+    for (const path of possiblePaths) {
+      try {
+        if (fs.existsSync(path)) {
+          executablePath = path;
+          break;
+        }
+      } catch {
+        // Игнорируем ошибки доступа
+      }
+    }
+  }
+
+  if (executablePath) {
+    options.executablePath = executablePath;
+    console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
+  }
+
+  return options;
+}
+
+/**
  * Создает и настраивает браузер с улучшенными настройками для обхода блокировок
  * @param headless - Запускать в headless режиме
  * @param useProxy - Использовать прокси (если доступны). По умолчанию true
@@ -182,6 +232,13 @@ export async function createBrowser(
     defaultViewport: null,
     args,
   };
+
+  // Используем системный Chromium, если указан в переменной окружения (для Docker)
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+    console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
+  }
 
   const browser = await PuppeteerExtra.launch(launchOptions);
 

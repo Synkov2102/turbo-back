@@ -52,7 +52,13 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     libu2f-udev \
     libvulkan1 \
+    chromium \
+    chromium-sandbox \
     && rm -rf /var/lib/apt/lists/*
+
+# Настройка переменных окружения для Puppeteer (использование системного Chromium)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 

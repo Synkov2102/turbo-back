@@ -7,6 +7,7 @@ import { Model } from 'mongoose';
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Car, CarDocument } from '../schemas/car.schema';
+import { getBaseLaunchOptions } from './utils/browser-helper';
 
 PuppeteerExtra.use(StealthPlugin());
 
@@ -28,11 +29,9 @@ export class AutoRuParserService {
     let browser: any;
 
     try {
-      browser = await PuppeteerExtra.launch({
-        headless: false, // чтоб можно было руками решать капчу
-        defaultViewport: null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      browser = await PuppeteerExtra.launch(
+        getBaseLaunchOptions(false, []), // headless: false для решения капчи вручную
+      );
 
       // Создаем страницу в инкогнито контексте
       // В Puppeteer createBrowserContext() автоматически создает инкогнито контекст

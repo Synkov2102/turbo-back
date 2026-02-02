@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Car, CarDocument } from '../schemas/car.schema';
+import { getBaseLaunchOptions } from './utils/browser-helper';
 
 PuppeteerExtra.use(StealthPlugin());
 
@@ -135,11 +136,9 @@ export class RmsothebysParserService {
     let browser: any;
 
     try {
-      browser = await PuppeteerExtra.launch({
-        headless: false,
-        defaultViewport: null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      browser = await PuppeteerExtra.launch(
+        getBaseLaunchOptions(false, []),
+      );
 
       const incognitoContext = await browser.createBrowserContext();
       const page = await incognitoContext.newPage();
@@ -350,11 +349,9 @@ export class RmsothebysParserService {
     let browser: any;
 
     try {
-      browser = await PuppeteerExtra.launch({
-        headless: false,
-        defaultViewport: null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      browser = await PuppeteerExtra.launch(
+        getBaseLaunchOptions(false, []),
+      );
 
       const incognitoContext = await browser.createBrowserContext();
       const page = await incognitoContext.newPage();
