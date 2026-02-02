@@ -1,16 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, FilterQuery } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
 import { Car, CarDocument } from '../schemas/car.schema';
 import {
   CRON_OLDTIMERFARM,
   CRON_RMSOTHEBYS,
   CRON_UPDATE_PRICES_RUB,
+  CRON_CHECK_AUTORU,
 } from '../constants/cron.constants';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { CarsService } from '../cars/cars.service';
+import { StatusCheckerService } from './status-checker.service';
 
 @Injectable()
 export class CronParserService {
@@ -22,6 +24,7 @@ export class CronParserService {
     private readonly oldtimerfarmParser: OldtimerfarmParserService,
     private readonly rmsothebysParser: RmsothebysParserService,
     private readonly carsService: CarsService,
+    private readonly statusCheckerService: StatusCheckerService,
   ) {}
 
   /**
@@ -66,6 +69,21 @@ export class CronParserService {
     } catch (error) {
       this.logger.error(
         `Ошибка при обновлении цен: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Cron job для проверки статуса объявлений Auto.ru
+   */
+  @Cron(CRON_CHECK_AUTORU)
+  async checkAutoRuCron() {
+    this.logger.log('Запуск cron job для проверки объявлений Auto.ru');
+    try {
+      await this.checkAutoRuCars();
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при проверке Auto.ru: ${(error as Error).message}`,
       );
     }
   }
@@ -271,6 +289,86 @@ export class CronParserService {
       throw error;
     } finally {
       this.isRunning = false;
+    }
+  }
+
+  /**
+   * Проверка статуса объявлений Auto.ru: проверяет все активные и unknown объявления.
+   */
+  async checkAutoRuCars(): Promise<void> {
+    this.logger.log('Начало проверки объявлений Auto.ru');
+
+    try {
+      // Находим объявления Auto.ru со статусом active или unknown
+      const query: FilterQuery<CarDocument> = {
+        url: { $regex: /auto\.ru/i },
+        $or: [
+          { status: 'active' },
+          { status: 'unknown' },
+          { status: { $exists: false } },
+        ],
+      };
+
+      const cars = await this.carModel.find(query).limit(50).exec();
+
+      this.logger.log(
+        `Найдено объявлений Auto.ru для проверки: ${cars.length}`,
+      );
+
+      if (cars.length === 0) {
+        this.logger.log('Нет объявлений Auto.ru для проверки');
+        return;
+      }
+
+      let checked = 0;
+      let changed = 0;
+
+      for (let i = 0; i < cars.length; i++) {
+        const car = cars[i];
+        try {
+          const carId = car._id?.toString() || 'unknown';
+          this.logger.log(
+            `Проверка ${i + 1}/${cars.length}: ${carId} - ${car.title}`,
+          );
+
+          const oldStatus = car.status || 'unknown';
+          const newStatus = await this.statusCheckerService.checkStatus(
+            car.url,
+          );
+          const statusChanged = oldStatus !== newStatus;
+
+          car.status = newStatus;
+          car.lastChecked = new Date();
+          await car.save();
+
+          checked++;
+          if (statusChanged) {
+            changed++;
+            this.logger.log(
+              `Статус изменен: ${oldStatus} -> ${newStatus} для ${String(carId)}`,
+            );
+          }
+
+          // Задержка между проверками
+          if (i < cars.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
+        } catch (error) {
+          const errorCarId: string = car._id?.toString() || 'unknown';
+          this.logger.error(
+            `Ошибка при проверке ${errorCarId}: ${(error as Error).message}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Проверка Auto.ru завершена: проверено ${checked}, изменено ${changed}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при проверке Auto.ru: ${(error as Error).message}`,
+      );
+      throw error;
     }
   }
 

@@ -2,6 +2,19 @@ import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import type { Browser, Page } from 'puppeteer';
 
+// Тип для сервиса решения капчи (чтобы избежать циклических зависимостей)
+export interface CaptchaSolver {
+  solveCaptcha(page: Page): Promise<boolean>;
+}
+
+/** Опции для ручного решения капчи с телефона (Telegram + страница с тапами) */
+export interface ManualCaptchaOptions {
+  /** Вызывается перед ожиданием; возвращает sessionId, если настроена отправка в Telegram */
+  onManualCaptchaWait?: (page: Page) => Promise<string | null>;
+  /** Возвращает очередь кликов с телефона для данной сессии (и очищает её) */
+  getPendingClicks?: (sessionId: string) => Promise<Array<{ x: number; y: number }>>;
+}
+
 // Используем stealth plugin
 PuppeteerExtra.use(StealthPlugin());
 
@@ -371,6 +384,17 @@ export async function setupPage(page: Page): Promise<void> {
  */
 export async function isIpBlocked(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
+    const href = window.location.href.toLowerCase();
+
+    // Редирект на страницу капчи Яндекса (Auto.ru → sso.passport.yandex.ru/showcaptcha)
+    if (
+      href.includes('passport.yandex.ru/showcaptcha') ||
+      href.includes('captcha.yandex.ru') ||
+      href.includes('smartcaptcha.yandex')
+    ) {
+      return true;
+    }
+
     const bodyText = (document.body?.textContent || '').toLowerCase();
     const title = document.title.toLowerCase();
 
@@ -448,6 +472,17 @@ export async function isIpBlocked(page: Page): Promise<boolean> {
  */
 export async function hasCaptcha(page: Page): Promise<boolean> {
   return await page.evaluate(() => {
+    const href = window.location.href.toLowerCase();
+
+    // Страница капчи Яндекса (Auto.ru редирект на showcaptcha)
+    if (
+      href.includes('passport.yandex.ru/showcaptcha') ||
+      href.includes('captcha.yandex.ru') ||
+      href.includes('smartcaptcha.yandex')
+    ) {
+      return true;
+    }
+
     const bodyText = (document.body?.textContent || '').toLowerCase();
 
     // Проверяем капчу Avito
@@ -521,12 +556,57 @@ export async function waitForCaptchaSolution(
 }
 
 /**
+ * Ожидает решения капчи с учётом кликов с телефона (очередь из API).
+ */
+export async function waitForCaptchaSolutionWithRemote(
+  page: Page,
+  sessionId: string,
+  getPendingClicks: (sessionId: string) => Promise<Array<{ x: number; y: number }>>,
+  maxWaitTime: number = 5 * 60 * 1000,
+): Promise<boolean> {
+  const startTime = Date.now();
+  const checkInterval = 2000;
+
+  while (Date.now() - startTime < maxWaitTime) {
+    const clicks = await getPendingClicks(sessionId);
+    for (const c of clicks) {
+      try {
+        await page.mouse.click(c.x, c.y);
+        console.log(`[BrowserHelper] Applied click from phone: ${c.x}, ${c.y}`);
+        await randomDelay(500, 1000);
+      } catch (err) {
+        console.warn(`[BrowserHelper] Click failed: ${(err as Error).message}`);
+      }
+    }
+
+    const hasCaptchaNow = await hasCaptcha(page);
+    const isBlocked = await isIpBlocked(page);
+    if (!hasCaptchaNow && !isBlocked) {
+      console.log('[BrowserHelper] Captcha solved (remote)!');
+      await randomDelay(2000, 3000);
+      return true;
+    }
+
+    await randomDelay(checkInterval, checkInterval);
+  }
+
+  console.warn(
+    `[BrowserHelper] Timeout waiting for remote captcha solution (${maxWaitTime / 1000}s)`,
+  );
+  return false;
+}
+
+/**
  * Переходит на страницу с обработкой блокировок и retry
+ * @param captchaSolver Опциональный сервис для автоматического решения капчи
+ * @param manualCaptcha Опции для ручного решения с телефона (Telegram + тапы)
  */
 export async function navigateWithRetry(
   page: Page,
   url: string,
   maxRetries: number = 3,
+  captchaSolver?: CaptchaSolver,
+  manualCaptcha?: ManualCaptchaOptions,
 ): Promise<boolean> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -559,18 +639,64 @@ export async function navigateWithRetry(
         // Проверяем, есть ли капча (Avito или Яндекс)
         const captchaPresent = await hasCaptcha(page);
         if (captchaPresent) {
-          console.log(
-            '[BrowserHelper] Captcha detected. Waiting for manual solution...',
-          );
-          console.log(
-            '[BrowserHelper] Please solve the captcha in the browser window.',
-          );
+          let captchaSolved = false;
 
-          // Ожидаем решения капчи (максимум 5 минут)
-          const captchaSolved = await waitForCaptchaSolution(
-            page,
-            5 * 60 * 1000,
-          );
+          // Пробуем автоматически решить капчу, если есть сервис
+          if (captchaSolver) {
+            console.log(
+              '[BrowserHelper] Captcha detected. Attempting automatic solution...',
+            );
+            try {
+              captchaSolved = await captchaSolver.solveCaptcha(page);
+              if (captchaSolved) {
+                console.log(
+                  '[BrowserHelper] Captcha solved automatically! Waiting for page to process...',
+                );
+                await randomDelay(3000, 5000);
+                // Проверяем, что капча действительно решена
+                const stillHasCaptcha = await hasCaptcha(page);
+                if (stillHasCaptcha) {
+                  console.warn(
+                    '[BrowserHelper] Captcha still present after automatic solution, falling back to manual',
+                  );
+                  captchaSolved = false;
+                }
+              }
+            } catch (error) {
+              console.error(
+                `[BrowserHelper] Error solving captcha automatically: ${(error as Error).message}`,
+              );
+              captchaSolved = false;
+            }
+          }
+
+          // Если автоматическое решение не сработало — уведомление в Telegram и ожидание с телефона или в браузере
+          if (!captchaSolved) {
+            const sessionId =
+              manualCaptcha?.onManualCaptchaWait != null
+                ? await manualCaptcha.onManualCaptchaWait(page)
+                : null;
+
+            if (
+              sessionId != null &&
+              manualCaptcha?.getPendingClicks != null
+            ) {
+              console.log(
+                '[BrowserHelper] Captcha sent to phone. Waiting for taps...',
+              );
+              captchaSolved = await waitForCaptchaSolutionWithRemote(
+                page,
+                sessionId,
+                manualCaptcha.getPendingClicks,
+                5 * 60 * 1000,
+              );
+            } else {
+              console.log(
+                '[BrowserHelper] Captcha detected. Waiting for manual solution...',
+              );
+              captchaSolved = await waitForCaptchaSolution(page, 5 * 60 * 1000);
+            }
+          }
 
           if (captchaSolved) {
             console.log(

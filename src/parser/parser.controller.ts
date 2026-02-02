@@ -246,4 +246,19 @@ export class ParserController {
     await this.cronParserService.runFullParseCycle();
     return { message: 'Полный цикл парсинга завершен' };
   }
+
+  @Post('check-autoru')
+  @ApiOperation({
+    summary: 'Проверить статус объявлений Auto.ru',
+    description:
+      'Проверяет активные и unknown объявления Auto.ru, которые не проверялись более указанного количества дней (по умолчанию 7).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Проверка завершена',
+  })
+  async checkAutoRuCars(): Promise<{ message: string }> {
+    await this.cronParserService.checkAutoRuCars();
+    return { message: 'Проверка Auto.ru завершена' };
+  }
 }

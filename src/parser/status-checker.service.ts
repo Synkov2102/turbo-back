@@ -4,6 +4,9 @@ import { Model, FilterQuery } from 'mongoose';
 import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
 import { StatusCheckResult } from './interfaces/status-check-result.interface';
+import { CaptchaService } from './captcha.service';
+import { TelegramService } from './telegram.service';
+import { CaptchaSessionService } from './captcha-session.service';
 import {
   createBrowser,
   createPage,
@@ -18,7 +21,35 @@ export type AdStatus = 'active' | 'sold' | 'removed' | 'unknown';
 
 @Injectable()
 export class StatusCheckerService {
-  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
+  constructor(
+    @InjectModel(Car.name) private carModel: Model<CarDocument>,
+    private readonly captchaService: CaptchaService,
+    private readonly telegramService: TelegramService,
+    private readonly captchaSessionService: CaptchaSessionService,
+  ) {}
+
+  /** Опции для ручного решения капчи с телефона (Telegram + страница с тапами) */
+  private get manualCaptchaOptions() {
+    if (!this.telegramService.isEnabled()) {
+      return undefined;
+    }
+    return {
+      onManualCaptchaWait: async (page: Page): Promise<string | null> => {
+        const sessionId =
+          this.captchaSessionService.createSession(page);
+        const screenshot = await page.screenshot({ type: 'png' });
+        await this.telegramService.sendCaptchaToPhone(
+          sessionId,
+          Buffer.from(screenshot),
+        );
+        return sessionId;
+      },
+      getPendingClicks: (sessionId: string) =>
+        Promise.resolve(
+          this.captchaSessionService.getAndTakeClicks(sessionId),
+        ),
+    };
+  }
 
   /**
    * Проверяет статус объявления на Avito
@@ -35,8 +66,14 @@ export class StatusCheckerService {
       const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
 
-      // Используем улучшенную навигацию с retry
-      const navigated = await navigateWithRetry(page, normalizedUrl, 3);
+      // Используем улучшенную навигацию с retry и автоматическим решением капчи
+      const navigated = await navigateWithRetry(
+        page,
+        normalizedUrl,
+        3,
+        this.captchaService,
+        this.manualCaptchaOptions,
+      );
       if (!navigated) {
         console.error(
           '[AvitoChecker] Failed to navigate to page after retries',
@@ -212,8 +249,14 @@ export class StatusCheckerService {
       const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
 
-      // Используем улучшенную навигацию с retry
-      const navigated = await navigateWithRetry(page, url, 3);
+      // Используем улучшенную навигацию с retry и автоматическим решением капчи
+      const navigated = await navigateWithRetry(
+        page,
+        url,
+        3,
+        this.captchaService,
+        this.manualCaptchaOptions,
+      );
       if (!navigated) {
         console.error(
           '[AutoRuChecker] Failed to navigate to page after retries',
