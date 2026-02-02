@@ -85,6 +85,9 @@ jobs:
           echo "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Опции SSH: таймаут, устойчивость к обрывам (Connection reset by peer)
+          printf '%s\n' 'Host *' '  ConnectTimeout 30' '  ServerAliveInterval 15' '  ServerAliveCountMax 3' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Deploy to production
         if: env.SSH_KEY != ''
@@ -92,7 +95,18 @@ jobs:
           echo "🚀 Deploying to production..."
           echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           
-          ssh -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} << EOF
+          SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o BatchMode=yes"
+          for i in 1 2 3; do
+            echo "Attempt $i/3..."
+            if ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "true"; then
+              break
+            fi
+            if [ $i -eq 3 ]; then echo "SSH connection failed after 3 attempts"; exit 1; fi
+            echo "Retrying in 10s..."
+            sleep 10
+          done
+          
+          ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} << EOF
             set -e
             cd \${DEPLOY_PATH:-/opt/turbo-back}
             echo "🛑 Stopping old turbo-back containers..."
