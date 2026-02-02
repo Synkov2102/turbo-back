@@ -10,12 +10,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Копируем файлы зависимостей
-COPY package*.json ./
+# Копируем только package.json (lock может быть не в sync с puppeteer@20.5.0)
+COPY package.json ./
 COPY tsconfig*.json nest-cli.json ./
 
-# Устанавливаем зависимости
-RUN npm ci
+# Устанавливаем зависимости по package.json
+RUN npm install
 
 # Копируем исходный код
 COPY . .
@@ -68,10 +68,10 @@ ENV XDG_CONFIG_HOME=/tmp/.config
 WORKDIR /app
 
 # Копируем package.json для установки только production зависимостей
-COPY package*.json ./
+COPY package.json ./
 
-# Устанавливаем только production зависимости
-RUN npm ci --only=production && npm cache clean --force
+# Устанавливаем только production зависимости (без lock — по package.json)
+RUN npm install --omit=dev && npm cache clean --force
 
 # Копируем собранное приложение из builder stage
 COPY --from=builder /app/dist ./dist
