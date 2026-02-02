@@ -147,6 +147,8 @@ export function getBaseLaunchOptions(
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
+    '--disable-crash-reporter',
+    '--disable-breakpad',
     ...additionalArgs,
   ];
 
@@ -218,6 +220,13 @@ export async function createBrowser(
     '--disable-gpu',
     '--start-maximized',
     `--user-agent=${userAgent}`,
+    // Отключаем crashpad в Docker (chrome_crashpad_handler: --database is required)
+    '--disable-crash-reporter',
+    '--disable-breakpad',
+    '--disable-background-networking',
+    '--disable-sync',
+    '--mute-audio',
+    '--no-default-browser-check',
   ];
 
   // Настройка прокси
