@@ -61,7 +61,7 @@ export class StatusCheckerService {
       // Нормализуем URL, удаляя параметры отслеживания
       const normalizedUrl = normalizeAvitoUrl(url);
       console.log(`[AvitoChecker] Checking status for URL: ${normalizedUrl}`);
-      browser = await createBrowser(true); // headless — работает в Docker без X server
+      browser = await createBrowser(true); // headless
 
       const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
@@ -244,7 +244,7 @@ export class StatusCheckerService {
 
     try {
       console.log(`[AutoRuChecker] Checking status for URL: ${url}`);
-      browser = await createBrowser(true); // headless — работает в Docker без X server
+      browser = await createBrowser(true); // headless
 
       const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
