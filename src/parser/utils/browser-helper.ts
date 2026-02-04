@@ -320,10 +320,11 @@ export async function createPage(
 
   if (shouldUseIncognito) {
     // Создаем или получаем инкогнито контекст
-    // В Puppeteer createBrowserContext() автоматически создает инкогнито контекст
+    // В Puppeteer используем createIncognitoBrowserContext() для создания инкогнито контекста
     let incognitoContext = (browser as any)._incognitoContext;
     if (!incognitoContext) {
-      incognitoContext = await browser.createBrowserContext();
+      // Используем type assertion, так как типы Puppeteer 20.5.0 могут не включать этот метод
+      incognitoContext = await (browser as any).createIncognitoBrowserContext();
       (browser as any)._incognitoContext = incognitoContext;
       console.log('[BrowserHelper] Created incognito browser context');
     }

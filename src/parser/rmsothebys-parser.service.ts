@@ -140,7 +140,7 @@ export class RmsothebysParserService {
         getBaseLaunchOptions(false, []),
       );
 
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -353,7 +353,7 @@ export class RmsothebysParserService {
         getBaseLaunchOptions(false, []),
       );
 
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 

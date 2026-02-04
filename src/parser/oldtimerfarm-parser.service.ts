@@ -48,7 +48,7 @@ export class OldtimerfarmParserService {
       );
 
       // Создаем страницу в инкогнито контексте
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -365,7 +365,7 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -558,7 +558,7 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 

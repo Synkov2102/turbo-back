@@ -34,8 +34,8 @@ export class AutoRuParserService {
       );
 
       // Создаем страницу в инкогнито контексте
-      // В Puppeteer createBrowserContext() автоматически создает инкогнито контекст
-      const incognitoContext = await browser.createBrowserContext();
+      // В Puppeteer используем createIncognitoBrowserContext() для создания инкогнито контекста
+      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
