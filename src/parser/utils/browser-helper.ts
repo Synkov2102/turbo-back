@@ -318,6 +318,8 @@ export async function createPage(
   const shouldUseIncognito =
     useIncognito && (browser as any)._useIncognito !== false;
 
+  let page: Page;
+  
   if (shouldUseIncognito) {
     // Создаем или получаем инкогнито контекст
     // В Puppeteer используем createIncognitoBrowserContext() для создания инкогнито контекста
@@ -327,15 +329,27 @@ export async function createPage(
       incognitoContext = await (browser as any).createIncognitoBrowserContext();
       (browser as any)._incognitoContext = incognitoContext;
       console.log('[BrowserHelper] Created incognito browser context');
+      // Небольшая задержка после создания контекста для инициализации
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     // Создаем страницу в инкогнито контексте
-    const page = await incognitoContext.newPage();
+    page = await incognitoContext.newPage();
     console.log('[BrowserHelper] Created page in incognito context');
-    return page;
   } else {
     // Создаем обычную страницу
-    return await browser.newPage();
+    page = await browser.newPage();
   }
+  
+  // Небольшая задержка после создания страницы, чтобы stealth plugin успел инициализироваться
+  // Это помогает избежать ошибок "Session closed" и "Requesting main frame too early"
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  // Убеждаемся, что страница не закрыта и готова к использованию
+  if (page.isClosed()) {
+    throw new Error('Page was closed immediately after creation');
+  }
+  
+  return page;
 }
 
 /**

@@ -64,7 +64,8 @@ export class StatusCheckerService {
       console.log(`[AvitoChecker] Checking status for URL: ${normalizedUrl}`);
       browser = await createBrowser(true); // headless
 
-      page = await createPage(browser, true); // Создаем страницу в инкогнито
+      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем с stealth plugin
+      page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
       await setupPage(page);
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
@@ -268,7 +269,8 @@ export class StatusCheckerService {
       console.log(`[AutoRuChecker] Checking status for URL: ${url}`);
       browser = await createBrowser(true); // headless
 
-      page = await createPage(browser, true); // Создаем страницу в инкогнито
+      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем с stealth plugin
+      page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
       await setupPage(page);
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
