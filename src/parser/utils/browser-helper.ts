@@ -299,14 +299,18 @@ export async function createBrowser(
   const browser = await PuppeteerExtra.launch(launchOptions);
 
   // Если прокси требует аутентификацию, настраиваем её
-  if (proxy && proxy.username && proxy.password) {
-    const pages = await browser.pages();
-    if (pages.length > 0) {
-      const page = pages[0];
-      await page.authenticate({
-        username: proxy.username,
-        password: proxy.password,
-      });
+  if (proxy && proxy.username && proxy.password && browser.isConnected()) {
+    try {
+      const pages = await browser.pages();
+      if (pages.length > 0) {
+        const page = pages[0];
+        await page.authenticate({
+          username: proxy.username,
+          password: proxy.password,
+        });
+      }
+    } catch (error) {
+      console.warn('[BrowserHelper] Warning: Could not authenticate proxy:', (error as Error).message);
     }
   }
 
@@ -362,17 +366,26 @@ export async function createPage(
     throw new Error('Page was closed immediately after creation');
   }
   
-  // Навигация к about:blank для инициализации страницы и main frame
+  // Задержка для завершения инициализации страницы и stealth plugin (если включен)
   // Это помогает избежать ошибки "Requesting main frame too early!"
-  try {
-    await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 });
-  } catch (error) {
-    // Игнорируем ошибки навигации к about:blank, но логируем их
-    console.warn('[BrowserHelper] Warning: Failed to navigate to about:blank:', (error as Error).message);
-  }
+  await new Promise(resolve => setTimeout(resolve, 1500));
   
-  // Дополнительная задержка для завершения инициализации stealth plugin
-  await new Promise(resolve => setTimeout(resolve, 500));
+  // Ждем, пока main frame будет готов
+  let retries = 0;
+  const maxRetries = 10;
+  while (retries < maxRetries) {
+    try {
+      // Пытаемся получить доступ к main frame
+      const mainFrame = page.mainFrame();
+      if (mainFrame) {
+        break; // Main frame готов
+      }
+    } catch (error) {
+      // Main frame еще не готов, ждем еще
+      await new Promise(resolve => setTimeout(resolve, 200));
+      retries++;
+    }
+  }
   
   // Проверяем еще раз, что страница не закрыта
   if (page.isClosed()) {
@@ -688,11 +701,27 @@ export async function navigateWithRetry(
         `[BrowserHelper] Navigating to ${url} (attempt ${attempt}/${maxRetries})...`,
       );
 
+      // Проверяем, что страница не закрыта
+      if (page.isClosed()) {
+        throw new Error('Page is closed');
+      }
+
       // Добавляем случайную задержку перед запросом
       if (attempt > 1) {
         const delay = attempt * 5000; // Увеличиваем задержку с каждой попыткой
         console.log(`[BrowserHelper] Waiting ${delay}ms before retry...`);
         await randomDelay(delay, delay + 2000);
+      }
+
+      // Ждем, пока страница будет готова к навигации
+      // Это помогает избежать ошибки "Requesting main frame too early!"
+      try {
+        // Проверяем, что main frame существует
+        await page.evaluate(() => document.readyState);
+      } catch (frameError) {
+        // Если main frame еще не готов, ждем немного
+        console.log('[BrowserHelper] Waiting for page to be ready...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       await page.goto(url, {

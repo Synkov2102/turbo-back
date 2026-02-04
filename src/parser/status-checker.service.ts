@@ -239,18 +239,29 @@ export class StatusCheckerService {
       }
       if (browser) {
         try {
-          // Закрываем все оставшиеся страницы перед закрытием браузера
-          const pages = await browser.pages();
-          for (const p of pages) {
+          // Проверяем, что браузер подключен перед попыткой получить страницы
+          if (browser.isConnected()) {
             try {
-              if (!p.isClosed()) {
-                await p.close();
+              // Закрываем все оставшиеся страницы перед закрытием браузера
+              const pages = await browser.pages();
+              for (const p of pages) {
+                try {
+                  if (!p.isClosed()) {
+                    await p.close();
+                  }
+                } catch (err) {
+                  // Игнорируем ошибки закрытия отдельных страниц
+                }
               }
-            } catch (err) {
-              // Игнорируем ошибки закрытия отдельных страниц
+            } catch (pagesError) {
+              // Игнорируем ошибки получения списка страниц
+              console.warn('[AvitoChecker] Warning: Could not get pages list:', (pagesError as Error).message);
             }
           }
-          await browser.close();
+          // Закрываем браузер только если он подключен
+          if (browser.isConnected()) {
+            await browser.close();
+          }
         } catch (closeError) {
           console.warn('[AvitoChecker] Error closing browser:', closeError);
         }
@@ -349,18 +360,29 @@ export class StatusCheckerService {
       }
       if (browser) {
         try {
-          // Закрываем все оставшиеся страницы перед закрытием браузера
-          const pages = await browser.pages();
-          for (const p of pages) {
+          // Проверяем, что браузер подключен перед попыткой получить страницы
+          if (browser.isConnected()) {
             try {
-              if (!p.isClosed()) {
-                await p.close();
+              // Закрываем все оставшиеся страницы перед закрытием браузера
+              const pages = await browser.pages();
+              for (const p of pages) {
+                try {
+                  if (!p.isClosed()) {
+                    await p.close();
+                  }
+                } catch (err) {
+                  // Игнорируем ошибки закрытия отдельных страниц
+                }
               }
-            } catch (err) {
-              // Игнорируем ошибки закрытия отдельных страниц
+            } catch (pagesError) {
+              // Игнорируем ошибки получения списка страниц
+              console.warn('[AutoRuChecker] Warning: Could not get pages list:', (pagesError as Error).message);
             }
           }
-          await browser.close();
+          // Закрываем браузер только если он подключен
+          if (browser.isConnected()) {
+            await browser.close();
+          }
         } catch (closeError) {
           console.warn('[AutoRuChecker] Error closing browser:', closeError);
         }
