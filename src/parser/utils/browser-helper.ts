@@ -154,7 +154,8 @@ export function getBaseLaunchOptions(
   ];
 
   const options: Parameters<typeof PuppeteerExtra.launch>[0] = {
-    headless,
+    // Используем новый headless режим для устранения предупреждения о deprecation
+    headless: headless ? 'new' : false,
     defaultViewport: null,
     args,
   };
@@ -260,7 +261,8 @@ export async function createBrowser(
   // Вместо этого будем использовать browser.createIncognitoBrowserContext()
 
   const launchOptions: Parameters<typeof PuppeteerExtra.launch>[0] = {
-    headless,
+    // Используем новый headless режим для устранения предупреждения о deprecation
+    headless: headless ? 'new' : false,
     defaultViewport: null,
     args,
     // В Docker crashpad требует записываемый каталог для --database; задаём HOME/TMP/XDG
@@ -329,8 +331,8 @@ export async function createPage(
       incognitoContext = await (browser as any).createIncognitoBrowserContext();
       (browser as any)._incognitoContext = incognitoContext;
       console.log('[BrowserHelper] Created incognito browser context');
-      // Небольшая задержка после создания контекста для инициализации
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Задержка после создания контекста для инициализации
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
     // Создаем страницу в инкогнито контексте
     page = await incognitoContext.newPage();
@@ -340,13 +342,26 @@ export async function createPage(
     page = await browser.newPage();
   }
   
-  // Небольшая задержка после создания страницы, чтобы stealth plugin успел инициализироваться
-  // Это помогает избежать ошибок "Session closed" и "Requesting main frame too early"
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  // Убеждаемся, что страница не закрыта и готова к использованию
+  // Убеждаемся, что страница не закрыта
   if (page.isClosed()) {
     throw new Error('Page was closed immediately after creation');
+  }
+  
+  // Навигация к about:blank для инициализации страницы и main frame
+  // Это помогает избежать ошибки "Requesting main frame too early!"
+  try {
+    await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 5000 });
+  } catch (error) {
+    // Игнорируем ошибки навигации к about:blank, но логируем их
+    console.warn('[BrowserHelper] Warning: Failed to navigate to about:blank:', (error as Error).message);
+  }
+  
+  // Дополнительная задержка для завершения инициализации stealth plugin
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Проверяем еще раз, что страница не закрыта
+  if (page.isClosed()) {
+    throw new Error('Page was closed during initialization');
   }
   
   return page;
