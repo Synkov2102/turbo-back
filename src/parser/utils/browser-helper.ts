@@ -1,6 +1,8 @@
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import puppeteer from 'puppeteer';
 import type { Browser, Page, BrowserContext } from 'puppeteer';
+import * as fs from 'fs';
 
 // Тип для сервиса решения капчи (чтобы избежать циклических зависимостей)
 export interface CaptchaSolver {
@@ -12,7 +14,9 @@ export interface ManualCaptchaOptions {
   /** Вызывается перед ожиданием; возвращает sessionId, если настроена отправка в Telegram */
   onManualCaptchaWait?: (page: Page) => Promise<string | null>;
   /** Возвращает очередь кликов с телефона для данной сессии (и очищает её) */
-  getPendingClicks?: (sessionId: string) => Promise<Array<{ x: number; y: number }>>;
+  getPendingClicks?: (
+    sessionId: string,
+  ) => Promise<Array<{ x: number; y: number }>>;
 }
 
 // Используем stealth plugin только если он включен через переменную окружения
@@ -24,10 +28,15 @@ if (USE_STEALTH_PLUGIN) {
     PuppeteerExtra.use(StealthPlugin());
     console.log('[BrowserHelper] Stealth plugin enabled');
   } catch (error) {
-    console.warn('[BrowserHelper] Failed to enable stealth plugin:', (error as Error).message);
+    console.warn(
+      '[BrowserHelper] Failed to enable stealth plugin:',
+      (error as Error).message,
+    );
   }
 } else {
-  console.log('[BrowserHelper] Stealth plugin disabled (set USE_STEALTH_PLUGIN=true to enable)');
+  console.log(
+    '[BrowserHelper] Stealth plugin disabled (set USE_STEALTH_PLUGIN=true to enable)',
+  );
 }
 
 // Интерфейс для прокси
@@ -155,7 +164,7 @@ export function randomDelay(
 export function getBaseLaunchOptions(
   headless: boolean = false,
   additionalArgs: string[] = [],
-): Parameters<typeof PuppeteerExtra.launch>[0] {
+): Parameters<typeof puppeteer.launch>[0] {
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -165,19 +174,18 @@ export function getBaseLaunchOptions(
     ...additionalArgs,
   ];
 
-  const options: Parameters<typeof PuppeteerExtra.launch>[0] = {
+  const options: Parameters<typeof puppeteer.launch>[0] = {
     // Используем новый headless режим для устранения предупреждения о deprecation
     headless: headless ? ('new' as any) : false,
     defaultViewport: null,
     args,
-  } as Parameters<typeof PuppeteerExtra.launch>[0];
+  };
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
   // Или пытаемся найти его автоматически
   let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   if (!executablePath) {
     // Пробуем стандартные пути для Chromium в Linux
-    const fs = require('fs');
     const possiblePaths = [
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',
@@ -196,7 +204,7 @@ export function getBaseLaunchOptions(
   }
 
   if (executablePath) {
-    options!.executablePath = executablePath;
+    options.executablePath = executablePath;
     console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
   }
 
@@ -272,7 +280,8 @@ export async function createBrowser(
   // НЕ используем флаг --incognito в args, так как он не работает правильно в Puppeteer
   // Вместо этого будем использовать browser.createBrowserContext() (создает инкогнито контекст по умолчанию)
 
-  const launchOptions: Parameters<typeof PuppeteerExtra.launch>[0] = {
+  // Тип опций запуска совместим с обоими puppeteer и puppeteer-extra
+  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
     // Используем новый headless режим для устранения предупреждения о deprecation
     headless: headless ? ('new' as any) : false,
     defaultViewport: null,
@@ -287,16 +296,20 @@ export async function createBrowser(
       XDG_CACHE_HOME: '/tmp/.cache',
       XDG_CONFIG_HOME: '/tmp/.config',
     },
-  } as Parameters<typeof PuppeteerExtra.launch>[0];
+  };
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   if (executablePath) {
-    launchOptions!.executablePath = executablePath;
+    launchOptions.executablePath = executablePath;
     console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
   }
 
-  const browser = await PuppeteerExtra.launch(launchOptions);
+  // Используем обычный puppeteer, если stealth plugin отключен
+  // Это помогает избежать проблем с "Requesting main frame too early!" в puppeteer-extra
+  const browser = USE_STEALTH_PLUGIN
+    ? await PuppeteerExtra.launch(launchOptions)
+    : await puppeteer.launch(launchOptions);
 
   // Если прокси требует аутентификацию, настраиваем её
   if (proxy && proxy.username && proxy.password && browser.isConnected()) {
@@ -310,7 +323,10 @@ export async function createBrowser(
         });
       }
     } catch (error) {
-      console.warn('[BrowserHelper] Warning: Could not authenticate proxy:', (error as Error).message);
+      console.warn(
+        '[BrowserHelper] Warning: Could not authenticate proxy:',
+        (error as Error).message,
+      );
     }
   }
 
@@ -337,18 +353,21 @@ export async function createPage(
     useIncognito && (browser as any)._useIncognito !== false;
 
   let page: Page;
-  
+
   if (shouldUseIncognito) {
     // Создаем или получаем инкогнито контекст
     // В Puppeteer 24+ используем createBrowserContext() вместо createIncognitoBrowserContext()
-    let incognitoContext = (browser as any)._incognitoContext as BrowserContext | undefined;
+    let incognitoContext = (browser as any)._incognitoContext as
+      | BrowserContext
+      | undefined;
     if (!incognitoContext) {
       // createBrowserContext() создает инкогнито контекст по умолчанию
-      incognitoContext = await browser.createBrowserContext();
+      // Используем приведение типа для совместимости с разными версиями Puppeteer
+      incognitoContext = await (browser as any).createBrowserContext();
       (browser as any)._incognitoContext = incognitoContext;
       console.log('[BrowserHelper] Created incognito browser context');
       // Задержка после создания контекста для инициализации
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
     // Создаем страницу в инкогнито контексте
     if (!incognitoContext) {
@@ -360,38 +379,23 @@ export async function createPage(
     // Создаем обычную страницу
     page = await browser.newPage();
   }
-  
+
   // Убеждаемся, что страница не закрыта
   if (page.isClosed()) {
     throw new Error('Page was closed immediately after creation');
   }
-  
+
   // Задержка для завершения инициализации страницы и stealth plugin (если включен)
   // Это помогает избежать ошибки "Requesting main frame too early!"
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // Ждем, пока main frame будет готов
-  let retries = 0;
-  const maxRetries = 10;
-  while (retries < maxRetries) {
-    try {
-      // Пытаемся получить доступ к main frame
-      const mainFrame = page.mainFrame();
-      if (mainFrame) {
-        break; // Main frame готов
-      }
-    } catch (error) {
-      // Main frame еще не готов, ждем еще
-      await new Promise(resolve => setTimeout(resolve, 200));
-      retries++;
-    }
-  }
-  
+  // Увеличена задержка для Docker окружения, где инициализация может быть медленнее
+  // В puppeteer-extra страница может требовать дополнительного времени для инициализации
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+
   // Проверяем еще раз, что страница не закрыта
   if (page.isClosed()) {
     throw new Error('Page was closed during initialization');
   }
-  
+
   return page;
 }
 
@@ -648,7 +652,9 @@ export async function waitForCaptchaSolution(
 export async function waitForCaptchaSolutionWithRemote(
   page: Page,
   sessionId: string,
-  getPendingClicks: (sessionId: string) => Promise<Array<{ x: number; y: number }>>,
+  getPendingClicks: (
+    sessionId: string,
+  ) => Promise<Array<{ x: number; y: number }>>,
   maxWaitTime: number = 5 * 60 * 1000,
 ): Promise<boolean> {
   const startTime = Date.now();
@@ -718,10 +724,10 @@ export async function navigateWithRetry(
       try {
         // Проверяем, что main frame существует
         await page.evaluate(() => document.readyState);
-      } catch (frameError) {
+      } catch {
         // Если main frame еще не готов, ждем немного
         console.log('[BrowserHelper] Waiting for page to be ready...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       await page.goto(url, {
@@ -780,10 +786,7 @@ export async function navigateWithRetry(
                 ? await manualCaptcha.onManualCaptchaWait(page)
                 : null;
 
-            if (
-              sessionId != null &&
-              manualCaptcha?.getPendingClicks != null
-            ) {
+            if (sessionId != null && manualCaptcha?.getPendingClicks != null) {
               console.log(
                 '[BrowserHelper] Captcha sent to phone. Waiting for taps...',
               );
