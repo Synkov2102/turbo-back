@@ -3,10 +3,19 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import type { Browser } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
 import { getBaseLaunchOptions } from './utils/browser-helper';
 
-PuppeteerExtra.use(StealthPlugin());
+// Используем stealth plugin только если он включен через переменную окружения
+const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
+if (USE_STEALTH_PLUGIN) {
+  try {
+    PuppeteerExtra.use(StealthPlugin());
+  } catch (error) {
+    console.warn('[OldtimerfarmParser] Failed to enable stealth plugin:', (error as Error).message);
+  }
+}
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91 Safari/537.36';
@@ -40,7 +49,7 @@ export class OldtimerfarmParserService {
       throw new Error('URL должен быть с домена oldtimerfarm.be');
     }
 
-    let browser: any;
+    let browser: Browser | undefined;
 
     try {
       browser = await PuppeteerExtra.launch(
@@ -48,7 +57,8 @@ export class OldtimerfarmParserService {
       );
 
       // Создаем страницу в инкогнито контексте
-      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
+      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
+      const incognitoContext = await browser.createBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -356,7 +366,7 @@ export class OldtimerfarmParserService {
    * Получает список ссылок на объявления со страницы списка
    */
   async getCarLinksFromListPage(listUrl: string): Promise<CarLink[]> {
-    let browser: any;
+    let browser: Browser | undefined;
 
     try {
       browser = await PuppeteerExtra.launch({
@@ -365,7 +375,8 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
+      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
+      const incognitoContext = await browser.createBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -549,7 +560,7 @@ export class OldtimerfarmParserService {
    * @deprecated Используйте parseAndSave с skipMotorcycles=true вместо этого метода
    */
   async getVehicleType(url: string): Promise<'car' | 'moto' | null> {
-    let browser: any;
+    let browser: Browser | undefined;
 
     try {
       browser = await PuppeteerExtra.launch({
@@ -558,7 +569,8 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      const incognitoContext = await (browser as any).createIncognitoBrowserContext();
+      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
+      const incognitoContext = await browser.createBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 

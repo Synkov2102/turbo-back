@@ -1,6 +1,6 @@
 import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import type { Browser, Page } from 'puppeteer';
+import type { Browser, Page, BrowserContext } from 'puppeteer';
 
 // Тип для сервиса решения капчи (чтобы избежать циклических зависимостей)
 export interface CaptchaSolver {
@@ -15,8 +15,20 @@ export interface ManualCaptchaOptions {
   getPendingClicks?: (sessionId: string) => Promise<Array<{ x: number; y: number }>>;
 }
 
-// Используем stealth plugin
-PuppeteerExtra.use(StealthPlugin());
+// Используем stealth plugin только если он включен через переменную окружения
+// По умолчанию отключен из-за проблем совместимости
+const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
+
+if (USE_STEALTH_PLUGIN) {
+  try {
+    PuppeteerExtra.use(StealthPlugin());
+    console.log('[BrowserHelper] Stealth plugin enabled');
+  } catch (error) {
+    console.warn('[BrowserHelper] Failed to enable stealth plugin:', (error as Error).message);
+  }
+} else {
+  console.log('[BrowserHelper] Stealth plugin disabled (set USE_STEALTH_PLUGIN=true to enable)');
+}
 
 // Интерфейс для прокси
 export interface ProxyConfig {
@@ -155,10 +167,10 @@ export function getBaseLaunchOptions(
 
   const options: Parameters<typeof PuppeteerExtra.launch>[0] = {
     // Используем новый headless режим для устранения предупреждения о deprecation
-    headless: headless ? 'new' : false,
+    headless: headless ? ('new' as any) : false,
     defaultViewport: null,
     args,
-  };
+  } as Parameters<typeof PuppeteerExtra.launch>[0];
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
   // Или пытаемся найти его автоматически
@@ -184,7 +196,7 @@ export function getBaseLaunchOptions(
   }
 
   if (executablePath) {
-    options.executablePath = executablePath;
+    options!.executablePath = executablePath;
     console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
   }
 
@@ -258,11 +270,11 @@ export async function createBrowser(
   }
 
   // НЕ используем флаг --incognito в args, так как он не работает правильно в Puppeteer
-  // Вместо этого будем использовать browser.createIncognitoBrowserContext()
+  // Вместо этого будем использовать browser.createBrowserContext() (создает инкогнито контекст по умолчанию)
 
   const launchOptions: Parameters<typeof PuppeteerExtra.launch>[0] = {
     // Используем новый headless режим для устранения предупреждения о deprecation
-    headless: headless ? 'new' : false,
+    headless: headless ? ('new' as any) : false,
     defaultViewport: null,
     args,
     // В Docker crashpad требует записываемый каталог для --database; задаём HOME/TMP/XDG
@@ -275,12 +287,12 @@ export async function createBrowser(
       XDG_CACHE_HOME: '/tmp/.cache',
       XDG_CONFIG_HOME: '/tmp/.config',
     },
-  };
+  } as Parameters<typeof PuppeteerExtra.launch>[0];
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   if (executablePath) {
-    launchOptions.executablePath = executablePath;
+    launchOptions!.executablePath = executablePath;
     console.log(`[BrowserHelper] Using system Chromium: ${executablePath}`);
   }
 
@@ -324,17 +336,20 @@ export async function createPage(
   
   if (shouldUseIncognito) {
     // Создаем или получаем инкогнито контекст
-    // В Puppeteer используем createIncognitoBrowserContext() для создания инкогнито контекста
-    let incognitoContext = (browser as any)._incognitoContext;
+    // В Puppeteer 24+ используем createBrowserContext() вместо createIncognitoBrowserContext()
+    let incognitoContext = (browser as any)._incognitoContext as BrowserContext | undefined;
     if (!incognitoContext) {
-      // Используем type assertion, так как типы Puppeteer 20.5.0 могут не включать этот метод
-      incognitoContext = await (browser as any).createIncognitoBrowserContext();
+      // createBrowserContext() создает инкогнито контекст по умолчанию
+      incognitoContext = await browser.createBrowserContext();
       (browser as any)._incognitoContext = incognitoContext;
       console.log('[BrowserHelper] Created incognito browser context');
       // Задержка после создания контекста для инициализации
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     // Создаем страницу в инкогнито контексте
+    if (!incognitoContext) {
+      throw new Error('Failed to create incognito browser context');
+    }
     page = await incognitoContext.newPage();
     console.log('[BrowserHelper] Created page in incognito context');
   } else {
