@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-3002}:3002"
+    ulimits:
+      nproc: 4096
+      nofile:
+        soft: 65536
+        hard: 65536
     environment:
       - NODE_ENV=production
       - MONGO_URI=${MONGO_URI}

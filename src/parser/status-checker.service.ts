@@ -56,6 +56,7 @@ export class StatusCheckerService {
    */
   async checkAvitoStatus(url: string): Promise<AdStatus> {
     let browser: Browser | undefined;
+    let page: Page | undefined;
 
     try {
       // Нормализуем URL, удаляя параметры отслеживания
@@ -63,7 +64,7 @@ export class StatusCheckerService {
       console.log(`[AvitoChecker] Checking status for URL: ${normalizedUrl}`);
       browser = await createBrowser(true); // headless
 
-      const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
+      page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
@@ -227,11 +228,31 @@ export class StatusCheckerService {
       console.error(`[AvitoChecker] Error checking Avito status:`, error);
       return 'unknown';
     } finally {
+      // Закрываем страницу перед закрытием браузера
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          console.warn('[AvitoChecker] Error closing page:', closeError);
+        }
+      }
       if (browser) {
-        // Не закрываем браузер сразу, чтобы можно было посмотреть
-        console.log('[AvitoChecker] Browser will stay open for 10 seconds...');
-        await randomDelay(10000, 10000);
-        await browser.close();
+        try {
+          // Закрываем все оставшиеся страницы перед закрытием браузера
+          const pages = await browser.pages();
+          for (const p of pages) {
+            try {
+              if (!p.isClosed()) {
+                await p.close();
+              }
+            } catch (err) {
+              // Игнорируем ошибки закрытия отдельных страниц
+            }
+          }
+          await browser.close();
+        } catch (closeError) {
+          console.warn('[AvitoChecker] Error closing browser:', closeError);
+        }
       }
     }
   }
@@ -241,12 +262,13 @@ export class StatusCheckerService {
    */
   async checkAutoRuStatus(url: string): Promise<AdStatus> {
     let browser: Browser | undefined;
+    let page: Page | undefined;
 
     try {
       console.log(`[AutoRuChecker] Checking status for URL: ${url}`);
       browser = await createBrowser(true); // headless
 
-      const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
+      page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
@@ -315,8 +337,31 @@ export class StatusCheckerService {
       console.error(`[AutoRuChecker] Error checking Auto.ru status:`, error);
       return 'unknown';
     } finally {
+      // Закрываем страницу перед закрытием браузера
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          console.warn('[AutoRuChecker] Error closing page:', closeError);
+        }
+      }
       if (browser) {
-        await browser.close();
+        try {
+          // Закрываем все оставшиеся страницы перед закрытием браузера
+          const pages = await browser.pages();
+          for (const p of pages) {
+            try {
+              if (!p.isClosed()) {
+                await p.close();
+              }
+            } catch (err) {
+              // Игнорируем ошибки закрытия отдельных страниц
+            }
+          }
+          await browser.close();
+        } catch (closeError) {
+          console.warn('[AutoRuChecker] Error closing browser:', closeError);
+        }
       }
     }
   }

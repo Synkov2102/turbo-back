@@ -493,12 +493,13 @@ export class AvitoParserService {
     }
 
     let browser: Browser | undefined;
+    let page: Page | undefined;
 
     try {
       console.log('[AvitoParser] Launching browser...');
       browser = await createBrowser(false); // пользователь сможет сам решить капчу
 
-      const page: Page = await createPage(browser, true); // Создаем страницу в инкогнито
+      page = await createPage(browser, true); // Создаем страницу в инкогнито
       await setupPage(page);
 
       page.on('console', (msg) => console.log('[PAGE LOG]:', msg.text()));
@@ -1096,8 +1097,31 @@ export class AvitoParserService {
     } catch (error) {
       throw new Error(`Failed to parse Avito ad: ${(error as Error).message}`);
     } finally {
+      // Закрываем страницу перед закрытием браузера
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          console.warn('[AvitoParser] Error closing page:', closeError);
+        }
+      }
       if (browser) {
-        await browser.close();
+        try {
+          // Закрываем все оставшиеся страницы перед закрытием браузера
+          const pages = await browser.pages();
+          for (const p of pages) {
+            try {
+              if (!p.isClosed()) {
+                await p.close();
+              }
+            } catch (err) {
+              // Игнорируем ошибки закрытия отдельных страниц
+            }
+          }
+          await browser.close();
+        } catch (closeError) {
+          console.warn('[AvitoParser] Error closing browser:', closeError);
+        }
       }
     }
   }

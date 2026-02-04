@@ -229,6 +229,14 @@ export async function createBrowser(
     '--disable-sync',
     '--mute-audio',
     '--no-default-browser-check',
+    // Отключаем DBus и дополнительные сервисы (нет в Docker контейнере)
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-features=TranslateUI',
+    '--disable-ipc-flooding-protection',
   ];
 
   // Настройка прокси
