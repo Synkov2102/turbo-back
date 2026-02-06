@@ -10,7 +10,12 @@ import { PostsModule } from './posts/posts.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      // В Docker: переменные передаются через docker-compose env_file → process.env
+      // ConfigModule автоматически читает из process.env (который заполнен через env_file)
+      // Локально: ConfigModule попытается прочитать .env файл, если он существует
       envFilePath: '.env',
+      // ignoreEnvFile: false - читает и из файла и из process.env (process.env имеет приоритет)
+      // В Docker переменные из env_file уже в process.env, поэтому файл не нужен
     }),
     ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({

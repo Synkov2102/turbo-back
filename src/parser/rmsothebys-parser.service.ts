@@ -149,8 +149,7 @@ export class RmsothebysParserService {
         getBaseLaunchOptions(false, []),
       );
 
-      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -363,8 +362,7 @@ export class RmsothebysParserService {
         getBaseLaunchOptions(false, []),
       );
 
-      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 

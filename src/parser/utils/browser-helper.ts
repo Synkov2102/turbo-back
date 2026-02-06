@@ -174,11 +174,17 @@ export function getBaseLaunchOptions(
     ...additionalArgs,
   ];
 
+  // В Docker используем обычный headless режим вместо 'new', так как 'new' может вызывать проблемы
+  // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
+  const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
   const options: Parameters<typeof puppeteer.launch>[0] = {
-    // Используем новый headless режим для устранения предупреждения о deprecation
-    headless: headless ? ('new' as any) : false,
+    // В Docker используем true вместо 'new' для избежания проблем с Target.createTarget timed out
+    headless: headless ? (isDocker ? true : ('new' as any)) : false,
     defaultViewport: null,
     args,
+    // Увеличиваем таймаут протокола для Docker (системный Chromium работает медленнее)
+    // Согласно https://github.com/puppeteer/puppeteer/issues/10144 даже 240000 может быть недостаточно
+    protocolTimeout: isDocker ? 300000 : 120000, // 5 минут в Docker, 2 минуты локально
   };
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
@@ -238,8 +244,11 @@ export async function createBrowser(
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
     '--no-first-run',
-    '--no-zygote',
-    '--disable-gpu',
+    // Убираем --no-zygote, так как он может вызывать проблемы с Target.createTarget timed out
+    // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
+    // и https://github.com/puppeteer/puppeteer/issues/10144
+    // '--no-zygote',
+    '--disable-gpu', // Критически важно для Docker - без этого Target.createTarget может таймаутить
     '--start-maximized',
     `--user-agent=${userAgent}`,
     // Отключаем crashpad в Docker (chrome_crashpad_handler: --database is required)
@@ -281,11 +290,17 @@ export async function createBrowser(
   // Вместо этого будем использовать browser.createBrowserContext() (создает инкогнито контекст по умолчанию)
 
   // Тип опций запуска совместим с обоими puppeteer и puppeteer-extra
+  // В Docker используем обычный headless режим вместо 'new', так как 'new' может вызывать проблемы
+  // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
+  const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
   const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
-    // Используем новый headless режим для устранения предупреждения о deprecation
-    headless: headless ? ('new' as any) : false,
+    // В Docker используем true вместо 'new' для избежания проблем с Target.createTarget timed out
+    headless: headless ? (isDocker ? true : ('new' as any)) : false,
     defaultViewport: null,
     args,
+    // Увеличиваем таймаут протокола для Docker (системный Chromium работает медленнее)
+    // Согласно https://github.com/puppeteer/puppeteer/issues/10144 даже 240000 может быть недостаточно
+    protocolTimeout: isDocker ? 300000 : 120000, // 5 минут в Docker, 2 минуты локально
     // В Docker crashpad требует записываемый каталог для --database; задаём HOME/TMP/XDG
     env: {
       ...process.env,
@@ -310,6 +325,14 @@ export async function createBrowser(
   const browser = USE_STEALTH_PLUGIN
     ? await PuppeteerExtra.launch(launchOptions)
     : await puppeteer.launch(launchOptions);
+
+  // В Docker даем браузеру время на полную инициализацию перед созданием страниц
+  // Это критически важно для избежания "Target.createTarget timed out"
+  // Согласно https://www.timsanteford.com/posts/how-to-fix-puppeteer-connection-error-protocolerror-network-enable-timed-out-in-docker/
+  if (isDocker) {
+    console.log('[BrowserHelper] Waiting for browser to fully initialize in Docker...');
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
 
   // Если прокси требует аутентификацию, настраиваем её
   if (proxy && proxy.username && proxy.password && browser.isConnected()) {
@@ -349,39 +372,100 @@ export async function createPage(
   useIncognito: boolean = true,
 ): Promise<Page> {
   // Проверяем, нужно ли использовать инкогнито
-  const shouldUseIncognito =
-    useIncognito && (browser as any)._useIncognito !== false;
+  // Если явно указано useIncognito = false, не используем инкогнито контекст
+  const shouldUseIncognito = useIncognito;
 
-  let page: Page;
+  let page: Page | undefined;
 
   if (shouldUseIncognito) {
     // Создаем или получаем инкогнито контекст
-    // В Puppeteer 24+ используем createBrowserContext() вместо createIncognitoBrowserContext()
     let incognitoContext = (browser as any)._incognitoContext as
       | BrowserContext
       | undefined;
     if (!incognitoContext) {
-      // createBrowserContext() создает инкогнито контекст по умолчанию
-      // Используем приведение типа для совместимости с разными версиями Puppeteer
-      incognitoContext = await (browser as any).createBrowserContext();
-      (browser as any)._incognitoContext = incognitoContext;
-      console.log('[BrowserHelper] Created incognito browser context');
-      // Задержка после создания контекста для инициализации
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      try {
+        incognitoContext = await browser.createIncognitoBrowserContext();
+        (browser as any)._incognitoContext = incognitoContext;
+        console.log('[BrowserHelper] Created incognito browser context');
+        // Задержка после создания контекста для инициализации (увеличена для Docker)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        console.warn('[BrowserHelper] Failed to create incognito context, using default context:', (error as Error).message);
+        // Если не удалось создать инкогнито контекст, используем обычный
+        page = await browser.newPage();
+        if (page.isClosed()) {
+          throw new Error('Page was closed immediately after creation');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        return page;
+      }
     }
-    // Создаем страницу в инкогнито контексте
+    // Создаем страницу в инкогнито контексте с retry логикой
     if (!incognitoContext) {
       throw new Error('Failed to create incognito browser context');
     }
-    page = await incognitoContext.newPage();
-    console.log('[BrowserHelper] Created page in incognito context');
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        page = await incognitoContext.newPage();
+        console.log('[BrowserHelper] Created page in incognito context');
+        break;
+      } catch (error) {
+        const errorMessage = (error as Error).message || String(error);
+        retries--;
+        if (errorMessage.includes('Target.createTarget timed out') || 
+            errorMessage.includes('Protocol error') ||
+            errorMessage.includes('Target closed')) {
+          if (retries > 0) {
+            const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+            const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
+            console.warn(`[BrowserHelper] Failed to create page in incognito context (${retries} retries left), waiting ${retryDelay}ms:`, errorMessage);
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+        // Если это другая ошибка или закончились попытки, пробуем обычную страницу
+        console.warn('[BrowserHelper] Failed to create page in incognito context, using default context:', errorMessage);
+        page = await browser.newPage();
+        break;
+      }
+    }
   } else {
-    // Создаем обычную страницу
-    page = await browser.newPage();
+    // Создаем обычную страницу с retry логикой
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        page = await browser.newPage();
+        break;
+      } catch (error) {
+        const errorMessage = (error as Error).message || String(error);
+        retries--;
+        if (errorMessage.includes('Target.createTarget timed out') || 
+            errorMessage.includes('Protocol error') ||
+            errorMessage.includes('Target closed')) {
+          if (retries > 0) {
+            const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+            const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
+            console.warn(`[BrowserHelper] Failed to create page (${retries} retries left), waiting ${retryDelay}ms:`, errorMessage);
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+            continue;
+          }
+        }
+        throw error; // Если это другая ошибка или закончились попытки, пробрасываем
+      }
+    }
   }
 
+  // Проверяем, что страница была создана
+  if (!page) {
+    throw new Error('Failed to create page after all retries');
+  }
+
+  // TypeScript теперь знает, что page определена
+  const createdPage: Page = page;
+
   // Убеждаемся, что страница не закрыта
-  if (page.isClosed()) {
+  if (createdPage.isClosed()) {
     throw new Error('Page was closed immediately after creation');
   }
 
@@ -389,41 +473,78 @@ export async function createPage(
   // Это помогает избежать ошибки "Requesting main frame too early!"
   // Увеличена задержка для Docker окружения, где инициализация может быть медленнее
   // В puppeteer-extra страница может требовать дополнительного времени для инициализации
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  // Для Docker с системным Chromium нужна большая задержка
+  const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+  const initDelay = isDocker ? 8000 : 2500; // Увеличена задержка в Docker до 8 секунд
+  await new Promise((resolve) => setTimeout(resolve, initDelay));
 
   // Проверяем еще раз, что страница не закрыта
-  if (page.isClosed()) {
+  if (createdPage.isClosed()) {
     throw new Error('Page was closed during initialization');
   }
 
-  return page;
+  return createdPage;
 }
 
 /**
  * Настраивает страницу с улучшенными заголовками и настройками
+ * @param page - Страница для настройки
+ * @param skipEvaluateOnNewDocument - Пропустить evaluateOnNewDocument (для быстрых проверок статуса в Docker)
  */
-export async function setupPage(page: Page): Promise<void> {
+export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean = false): Promise<void> {
+  // Проверяем, что страница не закрыта перед началом настройки
+  if (page.isClosed()) {
+    throw new Error('Page is closed before setup');
+  }
+
   const userAgent = getRandomUserAgent();
 
-  // Устанавливаем дополнительные заголовки
-  await page.setExtraHTTPHeaders({
-    'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-    accept:
-      'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'accept-encoding': 'gzip, deflate, br',
-    'sec-ch-ua':
-      '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'document',
-    'sec-fetch-mode': 'navigate',
-    'sec-fetch-site': 'none',
-    'sec-fetch-user': '?1',
-    'upgrade-insecure-requests': '1',
-  });
+  try {
+    // Устанавливаем дополнительные заголовки
+    await page.setExtraHTTPHeaders({
+      'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'accept-encoding': 'gzip, deflate, br',
+      'sec-ch-ua':
+        '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'sec-fetch-dest': 'document',
+      'sec-fetch-mode': 'navigate',
+      'sec-fetch-site': 'none',
+      'sec-fetch-user': '?1',
+      'upgrade-insecure-requests': '1',
+    });
+  } catch (error) {
+    if (page.isClosed()) {
+      throw new Error('Page was closed during setExtraHTTPHeaders');
+    }
+    throw error;
+  }
+
+  // Пропускаем evaluateOnNewDocument для быстрых проверок статуса (может вызывать проблемы в Docker)
+  if (skipEvaluateOnNewDocument) {
+    console.log('[BrowserHelper] Skipping evaluateOnNewDocument for quick status check');
+    // Добавляем задержку перед переходом (больше для Docker)
+    const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (isDocker) {
+      // В Docker системный Chromium требует больше времени для инициализации
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    } else {
+      await randomDelay(1000, 3000);
+    }
+    return;
+  }
+
+  // Проверяем еще раз перед evaluateOnNewDocument
+  if (page.isClosed()) {
+    throw new Error('Page is closed before evaluateOnNewDocument');
+  }
 
   // Дополнительные настройки для обхода детекции
-  await page.evaluateOnNewDocument((ua: string) => {
+  try {
+    await page.evaluateOnNewDocument((ua: string) => {
     // Устанавливаем User-Agent через JavaScript (более надежный способ)
     Object.defineProperty(navigator, 'userAgent', {
       get: () => ua,
@@ -437,8 +558,8 @@ export async function setupPage(page: Page): Promise<void> {
     // Добавляем chrome объект
     (window as any).chrome = {
       runtime: {},
-      loadTimes: function () {},
-      csi: function () {},
+      loadTimes: function () { },
+      csi: function () { },
       app: {},
     };
 
@@ -465,6 +586,23 @@ export async function setupPage(page: Page): Promise<void> {
     const originalNotification = window.Notification;
     window.Notification = originalNotification as any;
   }, userAgent);
+  } catch (error) {
+    // Если страница закрылась во время evaluateOnNewDocument, это нормально в некоторых случаях
+    // (например, если контекст был закрыт)
+    if (page.isClosed()) {
+      console.warn('[BrowserHelper] Page was closed during evaluateOnNewDocument, this may be expected in Docker');
+      // Не бросаем ошибку, так как это может быть нормальным поведением в Docker
+      return;
+    }
+    // Если это другая ошибка, пробрасываем её дальше
+    throw error;
+  }
+
+  // Проверяем еще раз после evaluateOnNewDocument
+  if (page.isClosed()) {
+    console.warn('[BrowserHelper] Page was closed after evaluateOnNewDocument');
+    return;
+  }
 
   // Добавляем случайную задержку перед переходом
   await randomDelay(1000, 3000);
@@ -719,21 +857,59 @@ export async function navigateWithRetry(
         await randomDelay(delay, delay + 2000);
       }
 
-      // Ждем, пока страница будет готова к навигации
+      // В Docker даем фиксированную задержку перед навигацией
       // Это помогает избежать ошибки "Requesting main frame too early!"
-      try {
-        // Проверяем, что main frame существует
-        await page.evaluate(() => document.readyState);
-      } catch {
-        // Если main frame еще не готов, ждем немного
-        console.log('[BrowserHelper] Waiting for page to be ready...');
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+      if (isDocker) {
+        // В Docker системный Chromium требует больше времени для инициализации страницы
+        // Фиксированная задержка более надежна, чем проверка готовности
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      } else {
+        // Локально можно использовать более короткую задержку
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      await page.goto(url, {
-        waitUntil: 'networkidle2',
-        timeout: 60000,
-      });
+      // Проверяем, что страница и браузер все еще подключены перед навигацией
+      try {
+        const browser = page.browser();
+        if (page.isClosed() || !browser.isConnected()) {
+          throw new Error('Page or browser closed before navigation');
+        }
+      } catch (browserError) {
+        // Если не удалось получить браузер, страница может быть закрыта
+        if (page.isClosed()) {
+          throw new Error('Page is closed before navigation');
+        }
+        // Игнорируем другие ошибки получения браузера
+      }
+
+      // В Docker используем более мягкие параметры для навигации
+      // Используем 'load' вместо 'domcontentloaded' для большей надежности в Docker
+      // Оборачиваем в try-catch для обработки "Requesting main frame too early!"
+      try {
+        await page.goto(url, {
+          waitUntil: isDocker ? 'load' : 'networkidle2',
+          timeout: 60000,
+        });
+      } catch (gotoError) {
+        const errorMessage = (gotoError as Error).message || String(gotoError);
+        // Если это ошибка "Requesting main frame too early!" (известная проблема в Puppeteer 20.6.0+)
+        // См. https://github.com/puppeteer/puppeteer/issues/11246
+        if (errorMessage.includes('Requesting main frame too early') || 
+            errorMessage.includes('Session closed') ||
+            errorMessage.includes('Protocol error')) {
+          console.warn(`[BrowserHelper] Got "${errorMessage}" error on attempt ${attempt}`);
+          if (attempt < maxRetries) {
+            // Увеличиваем задержку перед следующей попыткой для этой конкретной ошибки
+            const extraDelay = isDocker ? 5000 : 2000;
+            console.log(`[BrowserHelper] Waiting additional ${extraDelay}ms before retry...`);
+            await new Promise((resolve) => setTimeout(resolve, extraDelay));
+            // Пробрасываем ошибку, чтобы цикл for сделал retry
+            throw gotoError;
+          }
+        }
+        throw gotoError;
+      }
 
       // Ждем загрузки страницы
       await randomDelay(2000, 4000);

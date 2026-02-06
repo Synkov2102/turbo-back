@@ -20,10 +20,12 @@ services:
       - PROXY=${PROXY:-}
       - PROXY_LIST=${PROXY_LIST:-}
       - USE_STEALTH_PLUGIN=${USE_STEALTH_PLUGIN:-false}
+      - CAPTCHA_API_KEY=${CAPTCHA_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - APP_URL=${APP_URL:-}
     env_file:
       - .env
-    depends_on:
-      - mongo
     networks:
       - turbo-network
     healthcheck:
@@ -32,22 +34,6 @@ services:
       timeout: 3s
       retries: 3
       start_period: 40s
-
-  mongo:
-    image: mongo:7
-    container_name: turbo-back-mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - turbo-network
-    environment:
-      - MONGO_INITDB_DATABASE=scraper
-
-volumes:
-  mongo-data:
 
 networks:
   turbo-network:

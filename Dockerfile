@@ -10,12 +10,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Копируем только package.json (lock может быть не в sync с puppeteer@20.5.0)
-COPY package.json ./
+# Настройка переменных окружения для Puppeteer (пропускаем загрузку Chromium в builder stage)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Копируем package.json и package-lock.json для более быстрой установки
+COPY package.json package-lock.json* ./
 COPY tsconfig*.json nest-cli.json ./
 
-# Устанавливаем зависимости по package.json
-RUN npm install
+# Устанавливаем зависимости с увеличенными таймаутами
+RUN npm ci --prefer-offline --no-audit || npm install --prefer-offline --no-audit
 
 # Копируем исходный код
 COPY . .
@@ -67,11 +71,11 @@ ENV XDG_CONFIG_HOME=/tmp/.config
 
 WORKDIR /app
 
-# Копируем package.json для установки только production зависимостей
-COPY package.json ./
+# Копируем package.json и package-lock.json для установки только production зависимостей
+COPY package.json package-lock.json* ./
 
-# Устанавливаем только production зависимости (без lock — по package.json)
-RUN npm install --omit=dev && npm cache clean --force
+# Устанавливаем только production зависимости с увеличенными таймаутами
+RUN npm ci --omit=dev --prefer-offline --no-audit || npm install --omit=dev --prefer-offline --no-audit && npm cache clean --force
 
 # Копируем собранное приложение из builder stage
 COPY --from=builder /app/dist ./dist

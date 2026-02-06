@@ -62,11 +62,13 @@ export class StatusCheckerService {
       // Нормализуем URL, удаляя параметры отслеживания
       const normalizedUrl = normalizeAvitoUrl(url);
       console.log(`[AvitoChecker] Checking status for URL: ${normalizedUrl}`);
-      browser = await createBrowser(true); // headless
+      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем в Docker
+      browser = await createBrowser(true, true, null, false); // headless, useProxy, no proxy, no incognito
 
-      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем с stealth plugin
+      // Создаем страницу без инкогнито контекста
       page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
-      await setupPage(page);
+      // Для проверок статуса пропускаем evaluateOnNewDocument, чтобы избежать проблем в Docker
+      await setupPage(page, true);
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
       const navigated = await navigateWithRetry(
@@ -278,11 +280,64 @@ export class StatusCheckerService {
 
     try {
       console.log(`[AutoRuChecker] Checking status for URL: ${url}`);
-      browser = await createBrowser(true); // headless
+      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем в Docker
+      browser = await createBrowser(true, true, null, false); // headless, useProxy, no proxy, no incognito
 
-      // Отключаем инкогнито для проверок статуса, чтобы избежать проблем с stealth plugin
-      page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
-      await setupPage(page);
+      // Создаем страницу без инкогнито контекста с retry логикой
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
+          
+          // Проверяем, что страница не закрылась сразу после создания
+          if (page.isClosed()) {
+            throw new Error('Page closed immediately after creation');
+          }
+          
+          // Для проверок статуса пропускаем evaluateOnNewDocument, чтобы избежать проблем в Docker
+          await setupPage(page, true);
+          
+          // Дополнительная задержка после setupPage для Docker (системный Chromium требует больше времени)
+          const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
+          if (isDocker) {
+            console.log('[AutoRuChecker] Additional wait for Docker environment after setup...');
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+          
+          // Если дошли сюда, значит все успешно
+          break;
+        } catch (setupError) {
+          retries--;
+          const errorMessage = (setupError as Error).message || String(setupError);
+          
+          // Если страница закрылась, пробуем пересоздать
+          if (errorMessage.includes('closed') || errorMessage.includes('Session closed')) {
+            console.warn(`[AutoRuChecker] Page closed during setup, retrying... (${retries} retries left)`);
+            if (page && !page.isClosed()) {
+              try {
+                await page.close();
+              } catch {
+                // Игнорируем ошибки закрытия
+              }
+            }
+            page = undefined;
+            
+            if (retries === 0) {
+              throw setupError;
+            }
+            // Небольшая задержка перед повторной попыткой
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            continue;
+          }
+          // Если это другая ошибка, пробрасываем её
+          throw setupError;
+        }
+      }
+      
+      // Проверяем, что страница все еще открыта перед использованием
+      if (!page || page.isClosed()) {
+        throw new Error('Failed to create and setup page after retries');
+      }
 
       // Используем улучшенную навигацию с retry и автоматическим решением капчи
       const navigated = await navigateWithRetry(
@@ -353,9 +408,16 @@ export class StatusCheckerService {
       // Закрываем страницу перед закрытием браузера
       if (page) {
         try {
-          await page.close();
+          // Проверяем, что страница не закрыта перед попыткой закрыть
+          if (!page.isClosed() && browser?.isConnected()) {
+            await page.close();
+          }
         } catch (closeError) {
-          console.warn('[AutoRuChecker] Error closing page:', closeError);
+          // Игнорируем ошибки закрытия уже закрытой страницы
+          const errorMessage = (closeError as Error).message || String(closeError);
+          if (!errorMessage.includes('closed') && !errorMessage.includes('Connection closed')) {
+            console.warn('[AutoRuChecker] Error closing page:', closeError);
+          }
         }
       }
       if (browser) {

@@ -57,8 +57,7 @@ export class OldtimerfarmParserService {
       );
 
       // Создаем страницу в инкогнито контексте
-      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -375,8 +374,7 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
@@ -569,8 +567,7 @@ export class OldtimerfarmParserService {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
 
-      // В Puppeteer 24+ используем createBrowserContext() (создает инкогнито контекст по умолчанию)
-      const incognitoContext = await browser.createBrowserContext();
+      const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
       await page.setUserAgent(USER_AGENT);
 
