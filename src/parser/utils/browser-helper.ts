@@ -796,6 +796,10 @@ export async function waitForCaptchaSolutionWithRemote(
 
   while (Date.now() - startTime < maxWaitTime) {
     const clicks = await getPendingClicks(sessionId);
+    if (clicks.length > 0) {
+      console.log(`[BrowserHelper] Processing ${clicks.length} clicks from phone`);
+    }
+    
     for (const c of clicks) {
       try {
         // Проверяем, что страница не закрыта
@@ -804,51 +808,57 @@ export async function waitForCaptchaSolutionWithRemote(
           return false;
         }
 
-        // Пробуем кликнуть через JavaScript (более надежно для Яндекс капчи)
-        const clickResult = await page.evaluate(
-          (x, y) => {
-            // Создаем события клика на элементе в указанных координатах
-            const element = document.elementFromPoint(x, y);
-            if (element) {
-              const events = ['mousedown', 'mouseup', 'click'];
-              events.forEach((eventType) => {
-                const event = new MouseEvent(eventType, {
-                  view: window,
-                  bubbles: true,
-                  cancelable: true,
-                  clientX: x,
-                  clientY: y,
-                  button: 0,
-                });
-                element.dispatchEvent(event);
-              });
-              return { success: true, elementTag: element.tagName };
-            }
-            return { success: false, reason: 'no element at coordinates' };
-          },
-          c.x,
-          c.y,
+        // Получаем текущие размеры viewport и скролл
+        const viewport = page.viewport();
+        const pageInfo = await page.evaluate(() => ({
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          documentWidth: document.documentElement.scrollWidth,
+          documentHeight: document.documentElement.scrollHeight,
+        }));
+
+        console.log(
+          `[BrowserHelper] Click coordinates: ${c.x}, ${c.y} | Viewport: ${pageInfo.innerWidth}x${pageInfo.innerHeight} | Scroll: ${pageInfo.scrollX}, ${pageInfo.scrollY}`,
         );
 
-        if (clickResult.success) {
-          console.log(
-            `[BrowserHelper] Applied click via JS on ${clickResult.elementTag} at: ${c.x}, ${c.y}`,
+        // Проверяем, что координаты в пределах документа
+        if (c.x < 0 || c.y < 0 || c.x > pageInfo.documentWidth || c.y > pageInfo.documentHeight) {
+          console.warn(
+            `[BrowserHelper] Click coordinates out of bounds: ${c.x}, ${c.y} (doc: ${pageInfo.documentWidth}x${pageInfo.documentHeight})`,
           );
-        } else {
-          // Если через JS не получилось, используем обычный клик мыши
-          console.log(
-            `[BrowserHelper] JS click failed (${clickResult.reason}), using mouse click at: ${c.x}, ${c.y}`,
-          );
-          
-          // Перемещаем мышь к координатам перед кликом (более реалистично)
-          await page.mouse.move(c.x, c.y, { steps: 5 });
-          await randomDelay(50, 100);
-          
-          // Делаем клик с задержкой нажатия/отпускания (более реалистично для Яндекс капчи)
-          await page.mouse.down();
-          await randomDelay(50, 150);
-          await page.mouse.up();
+          continue;
         }
+
+        // Прокручиваем страницу, чтобы элемент был виден (если нужно)
+        const visibleX = c.x >= pageInfo.scrollX && c.x <= pageInfo.scrollX + pageInfo.innerWidth;
+        const visibleY = c.y >= pageInfo.scrollY && c.y <= pageInfo.scrollY + pageInfo.innerHeight;
+        
+        if (!visibleX || !visibleY) {
+          console.log(
+            `[BrowserHelper] Scrolling to make click visible. Target: ${c.x}, ${c.y}`,
+          );
+          await page.evaluate((x, y) => {
+            window.scrollTo({
+              left: Math.max(0, x - window.innerWidth / 2),
+              top: Math.max(0, y - window.innerHeight / 2),
+              behavior: 'smooth',
+            });
+          }, c.x, c.y);
+          await randomDelay(500, 800);
+        }
+        
+        // Перемещаем мышь к координатам перед кликом (более реалистично)
+        await page.mouse.move(c.x, c.y, { steps: 10 });
+        await randomDelay(100, 200);
+        
+        // Делаем клик с задержкой нажатия/отпускания (более реалистично для Яндекс капчи)
+        await page.mouse.down();
+        await randomDelay(100, 200);
+        await page.mouse.up();
+        
+        console.log(`[BrowserHelper] Applied click at: ${c.x}, ${c.y}`);
         
         // Увеличиваем задержку между кликами для Яндекс капчи
         await randomDelay(800, 1500);
