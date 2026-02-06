@@ -7,6 +7,7 @@ import {
   Res,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import { CaptchaSessionService } from './captcha-session.service';
 
@@ -14,6 +15,7 @@ import { CaptchaSessionService } from './captcha-session.service';
 export class CaptchaController {
   constructor(
     private readonly captchaSessionService: CaptchaSessionService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -29,6 +31,13 @@ export class CaptchaController {
     } catch {
       throw new NotFoundException('Сессия не найдена или истекла');
     }
+
+    // Получаем базовый URL приложения для использования полных путей
+    const appUrl = this.configService.get<string>('APP_URL') || 
+                   (process.env.NODE_ENV === 'production' 
+                     ? `https://${res.req.headers.host}` 
+                     : `http://${res.req.headers.host}`);
+    const baseUrl = appUrl.replace(/\/$/, '');
 
     const html = `<!DOCTYPE html>
 <html lang="ru">
@@ -55,11 +64,12 @@ export class CaptchaController {
   <div id="status">Загрузка…</div>
   <script>
     const sessionId = ${JSON.stringify(sessionId)};
+    const baseUrl = ${JSON.stringify(baseUrl)};
     const img = document.getElementById('captchaImg');
     const status = document.getElementById('status');
 
     function loadScreenshot() {
-      fetch('/captcha-session/' + sessionId + '/screenshot')
+      fetch(baseUrl + '/captcha-session/' + sessionId + '/screenshot')
         .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then(blob => {
           img.src = URL.createObjectURL(blob);
@@ -75,7 +85,7 @@ export class CaptchaController {
       const displayWidth = rect.width;
       const displayHeight = rect.height;
       status.textContent = 'Отправка клика…';
-      fetch('/captcha-session/' + sessionId + '/click', {
+      fetch(baseUrl + '/captcha-session/' + sessionId + '/click', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ x, y, displayWidth, displayHeight })
