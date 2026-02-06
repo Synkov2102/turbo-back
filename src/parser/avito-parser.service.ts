@@ -6,7 +6,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
-import { CaptchaService } from './captcha.service';
 import {
   createBrowser,
   createPage,
@@ -42,7 +41,6 @@ interface ExtractedData {
 export class AvitoParserService {
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
-    private readonly captchaService: CaptchaService,
   ) {}
 
   /**
@@ -505,12 +503,11 @@ export class AvitoParserService {
       page.on('console', (msg) => console.log('[PAGE LOG]:', msg.text()));
 
       console.log('[AvitoParser] Navigating to URL:', normalizedUrl);
-      // Используем улучшенную навигацию с retry и автоматическим решением капчи
+      // Используем улучшенную навигацию с retry и ручным решением капчи через Telegram
       const navigated = await navigateWithRetry(
         page,
         normalizedUrl,
         3,
-        this.captchaService,
       );
       if (!navigated) {
         throw new Error('Failed to navigate to page after retries');

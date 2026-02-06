@@ -5,10 +5,6 @@ import type { Browser, Page, BrowserContext } from 'puppeteer';
 import * as fs from 'fs';
 
 // Тип для сервиса решения капчи (чтобы избежать циклических зависимостей)
-export interface CaptchaSolver {
-  solveCaptcha(page: Page): Promise<boolean>;
-}
-
 /** Опции для ручного решения капчи с телефона (Telegram + страница с тапами) */
 export interface ManualCaptchaOptions {
   /** Вызывается перед ожиданием; возвращает sessionId, если настроена отправка в Telegram */
@@ -802,20 +798,77 @@ export async function waitForCaptchaSolutionWithRemote(
     const clicks = await getPendingClicks(sessionId);
     for (const c of clicks) {
       try {
-        await page.mouse.click(c.x, c.y);
-        console.log(`[BrowserHelper] Applied click from phone: ${c.x}, ${c.y}`);
-        await randomDelay(500, 1000);
+        // Проверяем, что страница не закрыта
+        if (page.isClosed()) {
+          console.warn('[BrowserHelper] Page closed during click processing');
+          return false;
+        }
+
+        // Пробуем кликнуть через JavaScript (более надежно для Яндекс капчи)
+        const clickResult = await page.evaluate(
+          (x, y) => {
+            // Создаем события клика на элементе в указанных координатах
+            const element = document.elementFromPoint(x, y);
+            if (element) {
+              const events = ['mousedown', 'mouseup', 'click'];
+              events.forEach((eventType) => {
+                const event = new MouseEvent(eventType, {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: x,
+                  clientY: y,
+                  button: 0,
+                });
+                element.dispatchEvent(event);
+              });
+              return { success: true, elementTag: element.tagName };
+            }
+            return { success: false, reason: 'no element at coordinates' };
+          },
+          c.x,
+          c.y,
+        );
+
+        if (clickResult.success) {
+          console.log(
+            `[BrowserHelper] Applied click via JS on ${clickResult.elementTag} at: ${c.x}, ${c.y}`,
+          );
+        } else {
+          // Если через JS не получилось, используем обычный клик мыши
+          console.log(
+            `[BrowserHelper] JS click failed (${clickResult.reason}), using mouse click at: ${c.x}, ${c.y}`,
+          );
+          
+          // Перемещаем мышь к координатам перед кликом (более реалистично)
+          await page.mouse.move(c.x, c.y, { steps: 5 });
+          await randomDelay(50, 100);
+          
+          // Делаем клик с задержкой нажатия/отпускания (более реалистично для Яндекс капчи)
+          await page.mouse.down();
+          await randomDelay(50, 150);
+          await page.mouse.up();
+        }
+        
+        // Увеличиваем задержку между кликами для Яндекс капчи
+        await randomDelay(800, 1500);
       } catch (err) {
         console.warn(`[BrowserHelper] Click failed: ${(err as Error).message}`);
       }
     }
 
-    const hasCaptchaNow = await hasCaptcha(page);
-    const isBlocked = await isIpBlocked(page);
-    if (!hasCaptchaNow && !isBlocked) {
-      console.log('[BrowserHelper] Captcha solved (remote)!');
-      await randomDelay(2000, 3000);
-      return true;
+    // Проверяем состояние капчи после применения всех кликов
+    if (!page.isClosed()) {
+      const hasCaptchaNow = await hasCaptcha(page);
+      const isBlocked = await isIpBlocked(page);
+      if (!hasCaptchaNow && !isBlocked) {
+        console.log('[BrowserHelper] Captcha solved (remote)!');
+        await randomDelay(2000, 3000);
+        return true;
+      }
+    } else {
+      console.warn('[BrowserHelper] Page closed during captcha check');
+      return false;
     }
 
     await randomDelay(checkInterval, checkInterval);
@@ -829,14 +882,12 @@ export async function waitForCaptchaSolutionWithRemote(
 
 /**
  * Переходит на страницу с обработкой блокировок и retry
- * @param captchaSolver Опциональный сервис для автоматического решения капчи
  * @param manualCaptcha Опции для ручного решения с телефона (Telegram + тапы)
  */
 export async function navigateWithRetry(
   page: Page,
   url: string,
   maxRetries: number = 3,
-  captchaSolver?: CaptchaSolver,
   manualCaptcha?: ManualCaptchaOptions,
 ): Promise<boolean> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -923,61 +974,29 @@ export async function navigateWithRetry(
 
         // Проверяем, есть ли капча (Avito или Яндекс)
         const captchaPresent = await hasCaptcha(page);
+        let captchaSolved = false;
         if (captchaPresent) {
-          let captchaSolved = false;
+          // Уведомление в Telegram и ожидание решения с телефона или в браузере
+          const sessionId =
+            manualCaptcha?.onManualCaptchaWait != null
+              ? await manualCaptcha.onManualCaptchaWait(page)
+              : null;
 
-          // Пробуем автоматически решить капчу, если есть сервис
-          if (captchaSolver) {
+          if (sessionId != null && manualCaptcha?.getPendingClicks != null) {
             console.log(
-              '[BrowserHelper] Captcha detected. Attempting automatic solution...',
+              '[BrowserHelper] Captcha sent to phone. Waiting for taps...',
             );
-            try {
-              captchaSolved = await captchaSolver.solveCaptcha(page);
-              if (captchaSolved) {
-                console.log(
-                  '[BrowserHelper] Captcha solved automatically! Waiting for page to process...',
-                );
-                await randomDelay(3000, 5000);
-                // Проверяем, что капча действительно решена
-                const stillHasCaptcha = await hasCaptcha(page);
-                if (stillHasCaptcha) {
-                  console.warn(
-                    '[BrowserHelper] Captcha still present after automatic solution, falling back to manual',
-                  );
-                  captchaSolved = false;
-                }
-              }
-            } catch (error) {
-              console.error(
-                `[BrowserHelper] Error solving captcha automatically: ${(error as Error).message}`,
-              );
-              captchaSolved = false;
-            }
-          }
-
-          // Если автоматическое решение не сработало — уведомление в Telegram и ожидание с телефона или в браузере
-          if (!captchaSolved) {
-            const sessionId =
-              manualCaptcha?.onManualCaptchaWait != null
-                ? await manualCaptcha.onManualCaptchaWait(page)
-                : null;
-
-            if (sessionId != null && manualCaptcha?.getPendingClicks != null) {
-              console.log(
-                '[BrowserHelper] Captcha sent to phone. Waiting for taps...',
-              );
-              captchaSolved = await waitForCaptchaSolutionWithRemote(
-                page,
-                sessionId,
-                manualCaptcha.getPendingClicks,
-                5 * 60 * 1000,
-              );
-            } else {
-              console.log(
-                '[BrowserHelper] Captcha detected. Waiting for manual solution...',
-              );
-              captchaSolved = await waitForCaptchaSolution(page, 5 * 60 * 1000);
-            }
+            captchaSolved = await waitForCaptchaSolutionWithRemote(
+              page,
+              sessionId,
+              manualCaptcha.getPendingClicks,
+              5 * 60 * 1000,
+            );
+          } else {
+            console.log(
+              '[BrowserHelper] Captcha detected. Waiting for manual solution...',
+            );
+            captchaSolved = await waitForCaptchaSolution(page, 5 * 60 * 1000);
           }
 
           if (captchaSolved) {

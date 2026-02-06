@@ -4,7 +4,6 @@ import { Model, FilterQuery } from 'mongoose';
 import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
 import { StatusCheckResult } from './interfaces/status-check-result.interface';
-import { CaptchaService } from './captcha.service';
 import { TelegramService } from './telegram.service';
 import { CaptchaSessionService } from './captcha-session.service';
 import {
@@ -23,7 +22,6 @@ export type AdStatus = 'active' | 'sold' | 'removed' | 'unknown';
 export class StatusCheckerService {
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
-    private readonly captchaService: CaptchaService,
     private readonly telegramService: TelegramService,
     private readonly captchaSessionService: CaptchaSessionService,
   ) {}
@@ -70,12 +68,11 @@ export class StatusCheckerService {
       // Для проверок статуса пропускаем evaluateOnNewDocument, чтобы избежать проблем в Docker
       await setupPage(page, true);
 
-      // Используем улучшенную навигацию с retry и автоматическим решением капчи
+      // Используем улучшенную навигацию с retry и ручным решением капчи через Telegram
       const navigated = await navigateWithRetry(
         page,
         normalizedUrl,
         3,
-        this.captchaService,
         this.manualCaptchaOptions,
       );
       if (!navigated) {
@@ -339,12 +336,11 @@ export class StatusCheckerService {
         throw new Error('Failed to create and setup page after retries');
       }
 
-      // Используем улучшенную навигацию с retry и автоматическим решением капчи
+      // Используем улучшенную навигацию с retry и ручным решением капчи через Telegram
       const navigated = await navigateWithRetry(
         page,
         url,
         3,
-        this.captchaService,
         this.manualCaptchaOptions,
       );
       if (!navigated) {
