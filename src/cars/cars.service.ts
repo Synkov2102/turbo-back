@@ -301,9 +301,18 @@ export class CarsService {
     };
 
     const yearRange = result.yearRange[0] || { minYear: 0, maxYear: 0 };
-    const priceRangeRUB = result.priceRangeRUB[0] || { minPrice: 0, maxPrice: 0 };
-    const priceRangeUSD = result.priceRangeUSD[0] || { minPrice: 0, maxPrice: 0 };
-    const priceRangeEUR = result.priceRangeEUR[0] || { minPrice: 0, maxPrice: 0 };
+    const priceRangeRUB = result.priceRangeRUB[0] || {
+      minPrice: 0,
+      maxPrice: 0,
+    };
+    const priceRangeUSD = result.priceRangeUSD[0] || {
+      minPrice: 0,
+      maxPrice: 0,
+    };
+    const priceRangeEUR = result.priceRangeEUR[0] || {
+      minPrice: 0,
+      maxPrice: 0,
+    };
     const engineVolumeRange = result.engineVolumeRange[0] || {
       minEngineVolume: 0,
       maxEngineVolume: 0,

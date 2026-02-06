@@ -28,10 +28,3 @@ export class PaginatedPostsResponseDto {
   @ApiProperty({ description: 'Метаданные пагинации', type: PaginationMetaDto })
   meta: PaginationMetaDto;
 }
-
-
-
-
-
-
-

@@ -7,9 +7,7 @@ import { PaginatedResponse } from './interfaces/paginated-response.interface';
 
 @Injectable()
 export class PostsService {
-  constructor(
-    @InjectModel(Post.name) private postModel: Model<PostDocument>,
-  ) {}
+  constructor(@InjectModel(Post.name) private postModel: Model<PostDocument>) {}
 
   async createPost(createPostDto: CreatePostDto): Promise<Post> {
     const post = new this.postModel({
@@ -56,5 +54,3 @@ export class PostsService {
     return await this.postModel.findById(id).exec();
   }
 }
-
-

@@ -75,8 +75,9 @@ export class CronParserService {
 
   /**
    * Cron job для проверки статуса объявлений Auto.ru
+   * ОТКЛЮЧЕНО: декоратор @Cron закомментирован
    */
-  @Cron(CRON_CHECK_AUTORU)
+  // @Cron(CRON_CHECK_AUTORU)
   async checkAutoRuCron() {
     this.logger.log('Запуск cron job для проверки объявлений Auto.ru');
     try {

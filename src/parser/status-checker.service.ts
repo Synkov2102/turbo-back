@@ -14,6 +14,7 @@ import {
   isIpBlocked,
   randomDelay,
   normalizeAvitoUrl,
+  DEFAULT_HEADLESS,
 } from './utils/browser-helper';
 
 export type AdStatus = 'active' | 'sold' | 'removed' | 'unknown';
@@ -33,19 +34,133 @@ export class StatusCheckerService {
     }
     return {
       onManualCaptchaWait: async (page: Page): Promise<string | null> => {
-        const sessionId =
-          this.captchaSessionService.createSession(page);
-        const screenshot = await page.screenshot({ type: 'png' });
-        await this.telegramService.sendCaptchaToPhone(
-          sessionId,
-          Buffer.from(screenshot),
-        );
-        return sessionId;
+        try {
+          const currentUrl = page.url();
+          console.log(
+            `[StatusChecker] onManualCaptchaWait called for URL: ${currentUrl}`,
+          );
+
+          if (page.isClosed()) {
+            console.error('[StatusChecker] Page is closed, cannot create session');
+            return null;
+          }
+
+          const sessionId = this.captchaSessionService.createSession(page);
+          console.log(`[StatusChecker] Created captcha session: ${sessionId}`);
+
+          // Ждем загрузки капчи перед скриншотом
+          try {
+            // Ждем появления элементов капчи на странице
+            console.log('[StatusChecker] Waiting for captcha elements to appear...');
+            await page
+              .waitForFunction(
+                () => {
+                  // Проверяем наличие элементов Яндекс капчи
+                  const hasYandexCaptcha =
+                    document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
+                    document.querySelector(
+                      'iframe[src*="smartcaptcha.yandex.ru"]',
+                    ) ||
+                    document.querySelector('[class*="smart-captcha"]') ||
+                    document.querySelector('[class*="yandex-captcha"]') ||
+                    document.querySelector('[id*="smart-captcha"]') ||
+                    document.querySelector('[id*="yandex-captcha"]') ||
+                    document.querySelector('[data-captcha="yandex"]') ||
+                    document.body?.textContent?.includes('Я не робот') ||
+                    document.body?.textContent?.includes('я не робот') ||
+                    document.body?.textContent?.includes('Вы не робот') ||
+                    document.body?.textContent?.includes('вы не робот');
+
+                  // Проверяем наличие элементов Avito капчи
+                  const hasAvitoCaptcha =
+                    document.querySelector(
+                      '[class*="captcha"][class*="block"]',
+                    ) ||
+                    document.querySelector('[id*="captcha"][id*="block"]') ||
+                    document.querySelector('[data-marker*="captcha"]');
+
+                  return hasYandexCaptcha || hasAvitoCaptcha;
+                },
+                { timeout: 10000 },
+              )
+              .catch(() => {
+                // Если капча не появилась за 10 секунд, продолжаем со скриншотом
+                console.warn(
+                  '[StatusChecker] Captcha elements not found, taking screenshot anyway',
+                );
+              });
+
+            // Дополнительная задержка для полной загрузки капчи
+            console.log('[StatusChecker] Waiting additional 2s for captcha to fully load...');
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // Прокручиваем страницу к капче, если она не видна
+            try {
+              await page.evaluate(() => {
+                const captchaElement =
+                  document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
+                  document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
+                  document.querySelector('[class*="smart-captcha"]') ||
+                  document.querySelector('[class*="yandex-captcha"]') ||
+                  document.querySelector('[id*="smart-captcha"]') ||
+                  document.querySelector('[id*="yandex-captcha"]') ||
+                  document.querySelector('[data-captcha="yandex"]') ||
+                  document.querySelector('[class*="captcha"][class*="block"]') ||
+                  document.querySelector('[id*="captcha"][id*="block"]') ||
+                  document.querySelector('[data-marker*="captcha"]');
+
+                if (captchaElement) {
+                  captchaElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                  });
+                }
+              });
+
+              // Ждем завершения прокрутки
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            } catch (scrollError) {
+              console.warn(
+                `[StatusChecker] Error scrolling to captcha: ${(scrollError as Error).message}`,
+              );
+            }
+          } catch (error) {
+            console.warn(
+              `[StatusChecker] Error waiting for captcha: ${(error as Error).message}`,
+            );
+          }
+
+          // Делаем скриншот полной страницы для лучшего качества
+          console.log('[StatusChecker] Taking screenshot...');
+          const screenshot = await page.screenshot({
+            type: 'png',
+            fullPage: true, // Делаем скриншот всей страницы
+          });
+          console.log(
+            `[StatusChecker] Screenshot taken, size: ${screenshot.length} bytes`,
+          );
+
+          // Отправляем скриншот в Telegram
+          console.log('[StatusChecker] Sending screenshot to Telegram...');
+          await this.telegramService.sendCaptchaToPhone(
+            sessionId,
+            Buffer.from(screenshot),
+          );
+          console.log(
+            `[StatusChecker] Screenshot sent to Telegram for session: ${sessionId}`,
+          );
+
+          return sessionId;
+        } catch (error) {
+          console.error(
+            `[StatusChecker] Error in onManualCaptchaWait: ${(error as Error).message}`,
+          );
+          console.error(error);
+          return null;
+        }
       },
       getPendingClicks: (sessionId: string) =>
-        Promise.resolve(
-          this.captchaSessionService.getAndTakeClicks(sessionId),
-        ),
+        Promise.resolve(this.captchaSessionService.getAndTakeClicks(sessionId)),
     };
   }
 
@@ -61,7 +176,7 @@ export class StatusCheckerService {
       const normalizedUrl = normalizeAvitoUrl(url);
       console.log(`[AvitoChecker] Checking status for URL: ${normalizedUrl}`);
       // Отключаем инкогнито для проверок статуса, чтобы избежать проблем в Docker
-      browser = await createBrowser(true, true, null, false); // headless, useProxy, no proxy, no incognito
+      browser = await createBrowser(DEFAULT_HEADLESS, true, null, false); // useProxy, no proxy, no incognito
 
       // Создаем страницу без инкогнито контекста
       page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
@@ -254,7 +369,10 @@ export class StatusCheckerService {
               }
             } catch (pagesError) {
               // Игнорируем ошибки получения списка страниц
-              console.warn('[AvitoChecker] Warning: Could not get pages list:', (pagesError as Error).message);
+              console.warn(
+                '[AvitoChecker] Warning: Could not get pages list:',
+                (pagesError as Error).message,
+              );
             }
           }
           // Закрываем браузер только если он подключен
@@ -278,38 +396,46 @@ export class StatusCheckerService {
     try {
       console.log(`[AutoRuChecker] Checking status for URL: ${url}`);
       // Отключаем инкогнито для проверок статуса, чтобы избежать проблем в Docker
-      browser = await createBrowser(true, true, null, false); // headless, useProxy, no proxy, no incognito
+      browser = await createBrowser(DEFAULT_HEADLESS, true, null, false); // useProxy, no proxy, no incognito
 
       // Создаем страницу без инкогнито контекста с retry логикой
       let retries = 3;
       while (retries > 0) {
         try {
           page = await createPage(browser, false); // Не используем инкогнито для быстрых проверок
-          
+
           // Проверяем, что страница не закрылась сразу после создания
           if (page.isClosed()) {
             throw new Error('Page closed immediately after creation');
           }
-          
+
           // Для проверок статуса пропускаем evaluateOnNewDocument, чтобы избежать проблем в Docker
           await setupPage(page, true);
-          
+
           // Дополнительная задержка после setupPage для Docker (системный Chromium требует больше времени)
           const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
           if (isDocker) {
-            console.log('[AutoRuChecker] Additional wait for Docker environment after setup...');
+            console.log(
+              '[AutoRuChecker] Additional wait for Docker environment after setup...',
+            );
             await new Promise((resolve) => setTimeout(resolve, 2000));
           }
-          
+
           // Если дошли сюда, значит все успешно
           break;
         } catch (setupError) {
           retries--;
-          const errorMessage = (setupError as Error).message || String(setupError);
-          
+          const errorMessage =
+            (setupError as Error).message || String(setupError);
+
           // Если страница закрылась, пробуем пересоздать
-          if (errorMessage.includes('closed') || errorMessage.includes('Session closed')) {
-            console.warn(`[AutoRuChecker] Page closed during setup, retrying... (${retries} retries left)`);
+          if (
+            errorMessage.includes('closed') ||
+            errorMessage.includes('Session closed')
+          ) {
+            console.warn(
+              `[AutoRuChecker] Page closed during setup, retrying... (${retries} retries left)`,
+            );
             if (page && !page.isClosed()) {
               try {
                 await page.close();
@@ -318,7 +444,7 @@ export class StatusCheckerService {
               }
             }
             page = undefined;
-            
+
             if (retries === 0) {
               throw setupError;
             }
@@ -330,7 +456,7 @@ export class StatusCheckerService {
           throw setupError;
         }
       }
-      
+
       // Проверяем, что страница все еще открыта перед использованием
       if (!page || page.isClosed()) {
         throw new Error('Failed to create and setup page after retries');
@@ -410,8 +536,12 @@ export class StatusCheckerService {
           }
         } catch (closeError) {
           // Игнорируем ошибки закрытия уже закрытой страницы
-          const errorMessage = (closeError as Error).message || String(closeError);
-          if (!errorMessage.includes('closed') && !errorMessage.includes('Connection closed')) {
+          const errorMessage =
+            (closeError as Error).message || String(closeError);
+          if (
+            !errorMessage.includes('closed') &&
+            !errorMessage.includes('Connection closed')
+          ) {
             console.warn('[AutoRuChecker] Error closing page:', closeError);
           }
         }
@@ -434,7 +564,10 @@ export class StatusCheckerService {
               }
             } catch (pagesError) {
               // Игнорируем ошибки получения списка страниц
-              console.warn('[AutoRuChecker] Warning: Could not get pages list:', (pagesError as Error).message);
+              console.warn(
+                '[AutoRuChecker] Warning: Could not get pages list:',
+                (pagesError as Error).message,
+              );
             }
           }
           // Закрываем браузер только если он подключен

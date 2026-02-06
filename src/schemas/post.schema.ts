@@ -23,7 +23,10 @@ export class Post {
   @ApiProperty({
     description: 'Массив ссылок на фотографии',
     type: [String],
-    example: ['https://example.com/photo1.jpg', 'https://example.com/photo2.jpg'],
+    example: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+    ],
     required: false,
   })
   @Prop({ type: [String], default: [] })
@@ -61,10 +64,3 @@ PostSchema.set('toJSON', {
     return rest;
   },
 });
-
-
-
-
-
-
-

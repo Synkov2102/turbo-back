@@ -13,7 +13,10 @@ if (USE_STEALTH_PLUGIN) {
   try {
     PuppeteerExtra.use(StealthPlugin());
   } catch (error) {
-    console.warn('[OldtimerfarmParser] Failed to enable stealth plugin:', (error as Error).message);
+    console.warn(
+      '[OldtimerfarmParser] Failed to enable stealth plugin:',
+      (error as Error).message,
+    );
   }
 }
 
@@ -53,7 +56,7 @@ export class OldtimerfarmParserService {
 
     try {
       browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []), // headless: false для решения капчи вручную
+        getBaseLaunchOptions(false, []), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
       );
 
       // Создаем страницу в инкогнито контексте
@@ -173,7 +176,11 @@ export class OldtimerfarmParserService {
         if (parts.length >= 1) {
           make = parts[0];
           if (parts.length >= 2 && !model) {
-            model = parts.slice(1).join(' ').replace(/\s*['']?\d{2}\s*$/, '').trim();
+            model = parts
+              .slice(1)
+              .join(' ')
+              .replace(/\s*['']?\d{2}\s*$/, '')
+              .trim();
           }
         }
       }
@@ -368,11 +375,12 @@ export class OldtimerfarmParserService {
     let browser: Browser | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch({
-        headless: false,
-        defaultViewport: null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      browser = await PuppeteerExtra.launch(
+        getBaseLaunchOptions(false, [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+        ]), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
+      );
 
       const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
@@ -561,11 +569,12 @@ export class OldtimerfarmParserService {
     let browser: Browser | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch({
-        headless: false,
-        defaultViewport: null,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
+      browser = await PuppeteerExtra.launch(
+        getBaseLaunchOptions(false, [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+        ]), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
+      );
 
       const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();

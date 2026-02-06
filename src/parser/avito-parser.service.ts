@@ -14,6 +14,7 @@ import {
   isIpBlocked,
   randomDelay,
   normalizeAvitoUrl,
+  DEFAULT_HEADLESS,
 } from './utils/browser-helper';
 
 interface ExtractedData {
@@ -39,9 +40,7 @@ interface ExtractedData {
 
 @Injectable()
 export class AvitoParserService {
-  constructor(
-    @InjectModel(Car.name) private carModel: Model<CarDocument>,
-  ) {}
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
 
   /**
    * Парсит фотографии через модальное окно для получения лучшего качества
@@ -495,20 +494,14 @@ export class AvitoParserService {
 
     try {
       console.log('[AvitoParser] Launching browser...');
-      browser = await createBrowser(false); // пользователь сможет сам решить капчу
+      browser = await createBrowser(false); // Переопределяем DEFAULT_HEADLESS на false - пользователь сможет сам решить капчу
 
       page = await createPage(browser, true); // Создаем страницу в инкогнито
-      await setupPage(page);
-
-      page.on('console', (msg) => console.log('[PAGE LOG]:', msg.text()));
+      await setupPage(page); // Фильтрация консольных сообщений настраивается автоматически в setupPage
 
       console.log('[AvitoParser] Navigating to URL:', normalizedUrl);
       // Используем улучшенную навигацию с retry и ручным решением капчи через Telegram
-      const navigated = await navigateWithRetry(
-        page,
-        normalizedUrl,
-        3,
-      );
+      const navigated = await navigateWithRetry(page, normalizedUrl, 3);
       if (!navigated) {
         throw new Error('Failed to navigate to page after retries');
       }
@@ -704,7 +697,6 @@ export class AvitoParserService {
             model = words[modelIndex];
           }
         }
-
 
         const yearElement = document.querySelector(
           '[itemprop="productionDate"]',
@@ -1120,7 +1112,10 @@ export class AvitoParserService {
               }
             } catch (pagesError) {
               // Игнорируем ошибки получения списка страниц
-              console.warn('[AvitoParser] Warning: Could not get pages list:', (pagesError as Error).message);
+              console.warn(
+                '[AvitoParser] Warning: Could not get pages list:',
+                (pagesError as Error).message,
+              );
             }
           }
           // Закрываем браузер только если он подключен

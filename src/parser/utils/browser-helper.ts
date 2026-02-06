@@ -19,6 +19,16 @@ export interface ManualCaptchaOptions {
 // По умолчанию отключен из-за проблем совместимости
 const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
 
+// Константа для headless режима по умолчанию
+// Можно переопределить через переменную окружения HEADLESS (true/false)
+// По умолчанию: true для production, false для development
+export const DEFAULT_HEADLESS =
+  process.env.HEADLESS === 'true'
+    ? true
+    : process.env.HEADLESS === 'false'
+      ? false
+      : process.env.NODE_ENV === 'production';
+
 if (USE_STEALTH_PLUGIN) {
   try {
     PuppeteerExtra.use(StealthPlugin());
@@ -158,7 +168,7 @@ export function randomDelay(
  * Получает базовые опции запуска Puppeteer с учетом системного Chromium (для Docker)
  */
 export function getBaseLaunchOptions(
-  headless: boolean = false,
+  headless: boolean = DEFAULT_HEADLESS,
   additionalArgs: string[] = [],
 ): Parameters<typeof puppeteer.launch>[0] {
   const args = [
@@ -221,7 +231,7 @@ export function getBaseLaunchOptions(
  * @param incognito - Запускать браузер в режиме инкогнито. По умолчанию true
  */
 export async function createBrowser(
-  headless: boolean = true,
+  headless: boolean = DEFAULT_HEADLESS,
   useProxy: boolean = true,
   proxyConfig?: ProxyConfig | null,
   incognito: boolean = true,
@@ -409,9 +419,9 @@ export async function createPage(
       } catch (error) {
         const errorMessage = (error as Error).message || String(error);
         retries--;
-        if (errorMessage.includes('Target.createTarget timed out') || 
-            errorMessage.includes('Protocol error') ||
-            errorMessage.includes('Target closed')) {
+        if (errorMessage.includes('Target.createTarget timed out') ||
+          errorMessage.includes('Protocol error') ||
+          errorMessage.includes('Target closed')) {
           if (retries > 0) {
             const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
@@ -436,9 +446,9 @@ export async function createPage(
       } catch (error) {
         const errorMessage = (error as Error).message || String(error);
         retries--;
-        if (errorMessage.includes('Target.createTarget timed out') || 
-            errorMessage.includes('Protocol error') ||
-            errorMessage.includes('Target closed')) {
+        if (errorMessage.includes('Target.createTarget timed out') ||
+          errorMessage.includes('Protocol error') ||
+          errorMessage.includes('Target closed')) {
           if (retries > 0) {
             const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
@@ -487,7 +497,40 @@ export async function createPage(
  * @param page - Страница для настройки
  * @param skipEvaluateOnNewDocument - Пропустить evaluateOnNewDocument (для быстрых проверок статуса в Docker)
  */
+/**
+ * Фильтрует консольные сообщения страницы, игнорируя некритичные ошибки
+ */
+function setupConsoleFiltering(page: Page): void {
+  // Фильтруем консольные сообщения, игнорируя ошибки Next.js Server Actions
+  page.on('console', (msg) => {
+    const text = msg.text();
+    // Игнорируем ошибки Next.js Server Actions, которые не критичны для парсинга
+    if (text.includes('Failed to find Server Action') ||
+      text.includes('failed-to-find-server-action') ||
+      text.includes('Server Action "x"')) {
+      return; // Игнорируем эти ошибки
+    }
+    // Выводим только важные сообщения (ошибки и предупреждения)
+    if (msg.type() === 'error' || msg.type() === 'warning') {
+      console.log(`[PAGE ${msg.type().toUpperCase()}]:`, text);
+    }
+  });
+
+  // Фильтруем ошибки страницы
+  page.on('pageerror', (error) => {
+    const errorMessage = error.message;
+    // Игнорируем ошибки Next.js Server Actions
+    if (!errorMessage.includes('Failed to find Server Action') &&
+      !errorMessage.includes('failed-to-find-server-action') &&
+      !errorMessage.includes('Server Action "x"')) {
+      console.log('[PAGE ERROR]:', errorMessage);
+    }
+  });
+}
+
 export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean = false): Promise<void> {
+  // Настраиваем фильтрацию консольных сообщений для всех страниц
+  setupConsoleFiltering(page);
   // Проверяем, что страница не закрыта перед началом настройки
   if (page.isClosed()) {
     throw new Error('Page is closed before setup');
@@ -541,47 +584,47 @@ export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean =
   // Дополнительные настройки для обхода детекции
   try {
     await page.evaluateOnNewDocument((ua: string) => {
-    // Устанавливаем User-Agent через JavaScript (более надежный способ)
-    Object.defineProperty(navigator, 'userAgent', {
-      get: () => ua,
-    });
+      // Устанавливаем User-Agent через JavaScript (более надежный способ)
+      Object.defineProperty(navigator, 'userAgent', {
+        get: () => ua,
+      });
 
-    // Скрываем webdriver
-    Object.defineProperty(navigator, 'webdriver', {
-      get: () => false,
-    });
+      // Скрываем webdriver
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
 
-    // Добавляем chrome объект
-    (window as any).chrome = {
-      runtime: {},
-      loadTimes: function () { },
-      csi: function () { },
-      app: {},
-    };
+      // Добавляем chrome объект
+      (window as any).chrome = {
+        runtime: {},
+        loadTimes: function () { },
+        csi: function () { },
+        app: {},
+      };
 
-    // Подделываем plugins
-    Object.defineProperty(navigator, 'plugins', {
-      get: () => [1, 2, 3, 4, 5],
-    });
+      // Подделываем plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
 
-    // Подделываем languages
-    Object.defineProperty(navigator, 'languages', {
-      get: () => ['ru-RU', 'ru', 'en-US', 'en'],
-    });
+      // Подделываем languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['ru-RU', 'ru', 'en-US', 'en'],
+      });
 
-    // Подделываем permissions
-    const originalQuery = (window.navigator as any).permissions?.query;
-    (window.navigator as any).permissions = {
-      query: (parameters: any) =>
-        parameters.name === 'notifications'
-          ? Promise.resolve({ state: Notification.permission })
-          : originalQuery(parameters),
-    };
+      // Подделываем permissions
+      const originalQuery = (window.navigator as any).permissions?.query;
+      (window.navigator as any).permissions = {
+        query: (parameters: any) =>
+          parameters.name === 'notifications'
+            ? Promise.resolve({ state: Notification.permission })
+            : originalQuery(parameters),
+      };
 
-    // Подделываем Notification
-    const originalNotification = window.Notification;
-    window.Notification = originalNotification as any;
-  }, userAgent);
+      // Подделываем Notification
+      const originalNotification = window.Notification;
+      window.Notification = originalNotification as any;
+    }, userAgent);
   } catch (error) {
     // Если страница закрылась во время evaluateOnNewDocument, это нормально в некоторых случаях
     // (например, если контекст был закрыт)
@@ -608,7 +651,11 @@ export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean =
  * Проверяет, является ли страница блокировкой IP или содержит капчу
  */
 export async function isIpBlocked(page: Page): Promise<boolean> {
-  return await page.evaluate(() => {
+  if (page.isClosed()) {
+    return false; // Если страница закрыта, считаем что не заблокирована
+  }
+  try {
+    return await page.evaluate(() => {
     const href = window.location.href.toLowerCase();
 
     // Редирект на страницу капчи Яндекса (Auto.ru → sso.passport.yandex.ru/showcaptcha)
@@ -689,19 +736,38 @@ export async function isIpBlocked(page: Page): Promise<boolean> {
     const isVeryShortPage = bodyText.length < 200 && !hasMainContent;
 
     return hasBlockedElements || hasBlockedText || isVeryShortPage;
-  });
+    });
+  } catch (error) {
+    const errorMessage = (error as Error).message || String(error);
+    // Если контекст выполнения был уничтожен из-за навигации, считаем что не заблокирована
+    if (
+      errorMessage.includes('Execution context was destroyed') ||
+      errorMessage.includes('Target closed') ||
+      page.isClosed()
+    ) {
+      console.warn('[BrowserHelper] Page navigated during isIpBlocked check, assuming not blocked');
+      return false;
+    }
+    // Для других ошибок пробрасываем дальше
+    throw error;
+  }
 }
 
 /**
  * Проверяет, есть ли на странице капча (Avito или Яндекс)
  */
 export async function hasCaptcha(page: Page): Promise<boolean> {
-  return await page.evaluate(() => {
+  if (page.isClosed()) {
+    return false; // Если страница закрыта, считаем что капчи нет
+  }
+  try {
+    return await page.evaluate(() => {
     const href = window.location.href.toLowerCase();
 
     // Страница капчи Яндекса (Auto.ru редирект на showcaptcha)
     if (
       href.includes('passport.yandex.ru/showcaptcha') ||
+      href.includes('auto.ru/showcaptcha') ||
       href.includes('captcha.yandex.ru') ||
       href.includes('smartcaptcha.yandex')
     ) {
@@ -727,11 +793,28 @@ export async function hasCaptcha(page: Page): Promise<boolean> {
       !!document.querySelector('[data-captcha="yandex"]') ||
       bodyText.includes('подтвердите, что вы не робот') ||
       bodyText.includes('подтвердите что вы не робот') ||
+      bodyText.includes('подтвердите, что запросы отправляли вы') ||
+      bodyText.includes('вы не робот') ||
       bodyText.includes('я не робот') ||
-      bodyText.includes("i'm not a robot");
+      bodyText.includes("i'm not a robot") ||
+      bodyText.includes('smartcaptcha by yandex');
 
     return hasAvitoCaptcha || hasYandexCaptcha;
-  });
+    });
+  } catch (error) {
+    const errorMessage = (error as Error).message || String(error);
+    // Если контекст выполнения был уничтожен из-за навигации, считаем что капчи нет
+    if (
+      errorMessage.includes('Execution context was destroyed') ||
+      errorMessage.includes('Target closed') ||
+      page.isClosed()
+    ) {
+      console.warn('[BrowserHelper] Page navigated during hasCaptcha check, assuming no captcha');
+      return false;
+    }
+    // Для других ошибок пробрасываем дальше
+    throw error;
+  }
 }
 
 /**
@@ -799,7 +882,7 @@ export async function waitForCaptchaSolutionWithRemote(
     if (clicks.length > 0) {
       console.log(`[BrowserHelper] Processing ${clicks.length} clicks from phone`);
     }
-    
+
     for (const c of clicks) {
       try {
         // Проверяем, что страница не закрыта
@@ -810,14 +893,31 @@ export async function waitForCaptchaSolutionWithRemote(
 
         // Получаем текущие размеры viewport и скролл
         const viewport = page.viewport();
-        const pageInfo = await page.evaluate(() => ({
-          scrollX: window.scrollX,
-          scrollY: window.scrollY,
-          innerWidth: window.innerWidth,
-          innerHeight: window.innerHeight,
-          documentWidth: document.documentElement.scrollWidth,
-          documentHeight: document.documentElement.scrollHeight,
-        }));
+        let pageInfo;
+        try {
+          pageInfo = await page.evaluate(() => ({
+            scrollX: window.scrollX,
+            scrollY: window.scrollY,
+            innerWidth: window.innerWidth,
+            innerHeight: window.innerHeight,
+            documentWidth: document.documentElement.scrollWidth,
+            documentHeight: document.documentElement.scrollHeight,
+          }));
+        } catch (evalError) {
+          const errorMessage = (evalError as Error).message || String(evalError);
+          // Если контекст выполнения был уничтожен из-за навигации, пропускаем этот клик
+          if (
+            errorMessage.includes('Execution context was destroyed') ||
+            errorMessage.includes('Target closed') ||
+            page.isClosed()
+          ) {
+            console.warn(
+              `[BrowserHelper] Page navigated or closed during evaluate, skipping click at ${c.x}, ${c.y}`,
+            );
+            continue;
+          }
+          throw evalError;
+        }
 
         console.log(
           `[BrowserHelper] Click coordinates: ${c.x}, ${c.y} | Viewport: ${pageInfo.innerWidth}x${pageInfo.innerHeight} | Scroll: ${pageInfo.scrollX}, ${pageInfo.scrollY}`,
@@ -834,32 +934,77 @@ export async function waitForCaptchaSolutionWithRemote(
         // Прокручиваем страницу, чтобы элемент был виден (если нужно)
         const visibleX = c.x >= pageInfo.scrollX && c.x <= pageInfo.scrollX + pageInfo.innerWidth;
         const visibleY = c.y >= pageInfo.scrollY && c.y <= pageInfo.scrollY + pageInfo.innerHeight;
-        
+
         if (!visibleX || !visibleY) {
           console.log(
             `[BrowserHelper] Scrolling to make click visible. Target: ${c.x}, ${c.y}`,
           );
-          await page.evaluate((x, y) => {
-            window.scrollTo({
-              left: Math.max(0, x - window.innerWidth / 2),
-              top: Math.max(0, y - window.innerHeight / 2),
-              behavior: 'smooth',
-            });
-          }, c.x, c.y);
+          try {
+            await page.evaluate((x, y) => {
+              window.scrollTo({
+                left: Math.max(0, x - window.innerWidth / 2),
+                top: Math.max(0, y - window.innerHeight / 2),
+                behavior: 'smooth',
+              });
+            }, c.x, c.y);
+          } catch (scrollError) {
+            const errorMessage = (scrollError as Error).message || String(scrollError);
+            if (
+              errorMessage.includes('Execution context was destroyed') ||
+              errorMessage.includes('Target closed') ||
+              page.isClosed()
+            ) {
+              console.warn(
+                `[BrowserHelper] Page navigated or closed during scroll, skipping click at ${c.x}, ${c.y}`,
+              );
+              continue;
+            }
+            throw scrollError;
+          }
           await randomDelay(500, 800);
         }
-        
-        // Перемещаем мышь к координатам перед кликом (более реалистично)
-        await page.mouse.move(c.x, c.y, { steps: 10 });
-        await randomDelay(100, 200);
-        
-        // Делаем клик с задержкой нажатия/отпускания (более реалистично для Яндекс капчи)
-        await page.mouse.down();
-        await randomDelay(100, 200);
-        await page.mouse.up();
-        
-        console.log(`[BrowserHelper] Applied click at: ${c.x}, ${c.y}`);
-        
+
+        // Для Яндекс капчи используем прямой клик мыши
+        // Пробуем использовать page.mouse.click() - более надежный метод
+        try {
+          // Сначала перемещаем мышь к координатам
+          await page.mouse.move(c.x, c.y, { steps: 10 });
+          await randomDelay(100, 200);
+
+          // Используем page.mouse.click() - это комбинирует move + down + up
+          await page.mouse.click(c.x, c.y, { delay: 100 });
+
+          console.log(`[BrowserHelper] Applied click at: ${c.x}, ${c.y}`);
+        } catch (mouseError) {
+          const errorMessage = (mouseError as Error).message || String(mouseError);
+          if (
+            errorMessage.includes('Execution context was destroyed') ||
+            errorMessage.includes('Target closed') ||
+            page.isClosed()
+          ) {
+            console.warn(
+              `[BrowserHelper] Page navigated or closed during click, skipping click at ${c.x}, ${c.y}`,
+            );
+            continue;
+          }
+          // Если mouse.click() не сработал, пробуем через down/up
+          try {
+            console.log(
+              `[BrowserHelper] mouse.click() failed, trying mouse.down/up at ${c.x}, ${c.y}`,
+            );
+            await page.mouse.move(c.x, c.y, { steps: 5 });
+            await randomDelay(100, 150);
+            await page.mouse.down();
+            await randomDelay(100, 150);
+            await page.mouse.up();
+            console.log(`[BrowserHelper] Applied click via down/up at: ${c.x}, ${c.y}`);
+          } catch (fallbackError) {
+            console.warn(
+              `[BrowserHelper] All click methods failed: ${(fallbackError as Error).message}`,
+            );
+          }
+        }
+
         // Увеличиваем задержку между кликами для Яндекс капчи
         await randomDelay(800, 1500);
       } catch (err) {
@@ -869,8 +1014,31 @@ export async function waitForCaptchaSolutionWithRemote(
 
     // Проверяем состояние капчи после применения всех кликов
     if (!page.isClosed()) {
-      const hasCaptchaNow = await hasCaptcha(page);
-      const isBlocked = await isIpBlocked(page);
+      let hasCaptchaNow = false;
+      let isBlocked = false;
+      try {
+        hasCaptchaNow = await hasCaptcha(page);
+        isBlocked = await isIpBlocked(page);
+      } catch (error) {
+        const errorMessage = (error as Error).message || String(error);
+        // Если контекст выполнения был уничтожен из-за навигации, считаем что капча решена
+        if (
+          errorMessage.includes('Execution context was destroyed') ||
+          errorMessage.includes('Target closed') ||
+          page.isClosed()
+        ) {
+          console.warn(
+            '[BrowserHelper] Page navigated during captcha check, assuming captcha solved',
+          );
+          hasCaptchaNow = false;
+          isBlocked = false;
+        } else {
+          // Для других ошибок логируем и продолжаем
+          console.warn(
+            `[BrowserHelper] Error checking captcha status: ${errorMessage}`,
+          );
+        }
+      }
       if (!hasCaptchaNow && !isBlocked) {
         console.log('[BrowserHelper] Captcha solved (remote)!');
         await randomDelay(2000, 3000);
@@ -956,9 +1124,9 @@ export async function navigateWithRetry(
         const errorMessage = (gotoError as Error).message || String(gotoError);
         // Если это ошибка "Requesting main frame too early!" (известная проблема в Puppeteer 20.6.0+)
         // См. https://github.com/puppeteer/puppeteer/issues/11246
-        if (errorMessage.includes('Requesting main frame too early') || 
-            errorMessage.includes('Session closed') ||
-            errorMessage.includes('Protocol error')) {
+        if (errorMessage.includes('Requesting main frame too early') ||
+          errorMessage.includes('Session closed') ||
+          errorMessage.includes('Protocol error')) {
           console.warn(`[BrowserHelper] Got "${errorMessage}" error on attempt ${attempt}`);
           if (attempt < maxRetries) {
             // Увеличиваем задержку перед следующей попыткой для этой конкретной ошибки
@@ -976,21 +1144,78 @@ export async function navigateWithRetry(
       await randomDelay(2000, 4000);
 
       // Проверяем, не заблокирован ли IP
-      const blocked = await isIpBlocked(page);
-      if (blocked) {
+      let blocked = false;
+      try {
+        blocked = await isIpBlocked(page);
+      } catch (error) {
+        const errorMessage = (error as Error).message || String(error);
+        // Если контекст выполнения был уничтожен из-за навигации, считаем что не заблокирована
+        if (
+          errorMessage.includes('Execution context was destroyed') ||
+          errorMessage.includes('Target closed') ||
+          page.isClosed()
+        ) {
+          console.warn(
+            '[BrowserHelper] Page navigated during isIpBlocked check after goto, assuming not blocked',
+          );
+          blocked = false;
+        } else {
+          throw error;
+        }
+      }
+
+      // Проверяем, есть ли капча (Avito или Яндекс) - независимо от блокировки IP
+      let captchaPresent = false;
+      try {
+        captchaPresent = await hasCaptcha(page);
+        console.log(
+          `[BrowserHelper] Captcha check result: ${captchaPresent}, URL: ${page.url()}`,
+        );
+      } catch (error) {
+        const errorMessage = (error as Error).message || String(error);
+        // Если контекст выполнения был уничтожен из-за навигации, считаем что капчи нет
+        if (
+          errorMessage.includes('Execution context was destroyed') ||
+          errorMessage.includes('Target closed') ||
+          page.isClosed()
+        ) {
+          console.warn(
+            '[BrowserHelper] Page navigated during hasCaptcha check, assuming no captcha',
+          );
+          captchaPresent = false;
+        } else {
+          throw error;
+        }
+      }
+
+      // Обрабатываем капчу или блокировку IP
+      if (blocked || captchaPresent) {
         console.warn(
-          `[BrowserHelper] IP blocked or captcha detected on attempt ${attempt}. Current URL: ${page.url()}`,
+          `[BrowserHelper] IP blocked: ${blocked}, Captcha present: ${captchaPresent} on attempt ${attempt}. Current URL: ${page.url()}`,
         );
 
-        // Проверяем, есть ли капча (Avito или Яндекс)
-        const captchaPresent = await hasCaptcha(page);
         let captchaSolved = false;
         if (captchaPresent) {
           // Уведомление в Telegram и ожидание решения с телефона или в браузере
-          const sessionId =
-            manualCaptcha?.onManualCaptchaWait != null
-              ? await manualCaptcha.onManualCaptchaWait(page)
-              : null;
+          console.log(
+            '[BrowserHelper] Calling onManualCaptchaWait to send screenshot...',
+          );
+          let sessionId: string | null = null;
+          try {
+            sessionId =
+              manualCaptcha?.onManualCaptchaWait != null
+                ? await manualCaptcha.onManualCaptchaWait(page)
+                : null;
+            console.log(
+              `[BrowserHelper] onManualCaptchaWait returned sessionId: ${sessionId}`,
+            );
+          } catch (error) {
+            console.error(
+              `[BrowserHelper] Error in onManualCaptchaWait: ${(error as Error).message}`,
+            );
+            // Продолжаем без отправки в Telegram, но ждем ручного решения
+            sessionId = null;
+          }
 
           if (sessionId != null && manualCaptcha?.getPendingClicks != null) {
             console.log(

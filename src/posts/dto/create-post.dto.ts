@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsUrl } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsArray,
+  IsUrl,
+} from 'class-validator';
 
 export class CreatePostDto {
   @ApiProperty({
@@ -21,7 +27,10 @@ export class CreatePostDto {
   @ApiProperty({
     description: 'Массив ссылок на фотографии',
     type: [String],
-    example: ['https://example.com/photo1.jpg', 'https://example.com/photo2.jpg'],
+    example: [
+      'https://example.com/photo1.jpg',
+      'https://example.com/photo2.jpg',
+    ],
     required: false,
   })
   @IsArray()
@@ -39,10 +48,3 @@ export class CreatePostDto {
   @IsOptional()
   url?: string;
 }
-
-
-
-
-
-
-

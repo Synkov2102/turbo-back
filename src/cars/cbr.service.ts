@@ -31,9 +31,7 @@ export class CbrService {
    */
   async getExchangeRates(date?: string): Promise<ExchangeRates> {
     try {
-      const url = date
-        ? `${this.CBR_URL}?date_req=${date}`
-        : this.CBR_URL;
+      const url = date ? `${this.CBR_URL}?date_req=${date}` : this.CBR_URL;
 
       this.logger.log(`Запрос курсов валют с ЦБ РФ: ${url}`);
 
@@ -107,4 +105,3 @@ export class CbrService {
     });
   }
 }
-

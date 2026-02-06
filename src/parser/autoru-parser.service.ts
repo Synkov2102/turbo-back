@@ -8,7 +8,7 @@ import PuppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import type { Browser } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
-import { getBaseLaunchOptions } from './utils/browser-helper';
+import { getBaseLaunchOptions, DEFAULT_HEADLESS } from './utils/browser-helper';
 
 // Используем stealth plugin только если он включен через переменную окружения
 const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
@@ -16,7 +16,10 @@ if (USE_STEALTH_PLUGIN) {
   try {
     PuppeteerExtra.use(StealthPlugin());
   } catch (error) {
-    console.warn('[AutoRuParser] Failed to enable stealth plugin:', (error as Error).message);
+    console.warn(
+      '[AutoRuParser] Failed to enable stealth plugin:',
+      (error as Error).message,
+    );
   }
 }
 
@@ -25,9 +28,7 @@ const USER_AGENT =
 
 @Injectable()
 export class AutoRuParserService {
-  constructor(
-    @InjectModel(Car.name) private carModel: Model<CarDocument>,
-  ) {}
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
 
   async parseAndSave(url: string): Promise<Car> {
     // Валидация URL - проверяем что это Auto.ru
@@ -39,7 +40,7 @@ export class AutoRuParserService {
 
     try {
       browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []), // headless: false для решения капчи вручную
+        getBaseLaunchOptions(false, []), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
       );
 
       // Создаем страницу в инкогнито контексте

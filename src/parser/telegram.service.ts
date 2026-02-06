@@ -9,7 +9,8 @@ export class TelegramService {
   private readonly appUrl: string | null = null;
 
   constructor(private readonly configService: ConfigService) {
-    this.botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN') ?? null;
+    this.botToken =
+      this.configService.get<string>('TELEGRAM_BOT_TOKEN') ?? null;
     this.chatId = this.configService.get<string>('TELEGRAM_CHAT_ID') ?? null;
     this.appUrl = this.configService.get<string>('APP_URL') ?? null;
     if (this.botToken && this.chatId) {
@@ -33,7 +34,9 @@ export class TelegramService {
     screenshotBuffer: Buffer,
   ): Promise<void> {
     if (!this.botToken || !this.chatId) {
-      this.logger.warn('Telegram not configured, skipping captcha notification');
+      this.logger.warn(
+        'Telegram not configured, skipping captcha notification',
+      );
       return;
     }
 

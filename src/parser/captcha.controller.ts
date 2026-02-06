@@ -33,10 +33,11 @@ export class CaptchaController {
     }
 
     // Получаем базовый URL приложения для использования полных путей
-    const appUrl = this.configService.get<string>('APP_URL') || 
-                   (process.env.NODE_ENV === 'production' 
-                     ? `https://${res.req.headers.host}` 
-                     : `http://${res.req.headers.host}`);
+    const appUrl =
+      this.configService.get<string>('APP_URL') ||
+      (process.env.NODE_ENV === 'production'
+        ? `https://${res.req.headers.host}`
+        : `http://${res.req.headers.host}`);
     const baseUrl = appUrl.replace(/\/$/, '');
 
     const html = `<!DOCTYPE html>
@@ -122,7 +123,13 @@ export class CaptchaController {
   @Post('captcha-session/:id/click')
   async addClick(
     @Param('id') id: string,
-    @Body() body: { x: number; y: number; displayWidth?: number; displayHeight?: number },
+    @Body()
+    body: {
+      x: number;
+      y: number;
+      displayWidth?: number;
+      displayHeight?: number;
+    },
   ): Promise<{ ok: boolean }> {
     const displayWidth = body.displayWidth ?? 0;
     const displayHeight = body.displayHeight ?? 0;

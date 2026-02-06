@@ -27,4 +27,3 @@ export class PostsQueryDto {
   @Min(1)
   limit?: number;
 }
-

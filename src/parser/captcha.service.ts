@@ -2,14 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Page } from 'puppeteer';
 
-export type CaptchaType = 'recaptcha2' | 'recaptcha3' | 'hcaptcha' | 'yandex' | 'image';
+export type CaptchaType =
+  | 'recaptcha2'
+  | 'recaptcha3'
+  | 'hcaptcha'
+  | 'yandex'
+  | 'image';
 
 @Injectable()
 export class CaptchaService {
   private readonly logger = new Logger(CaptchaService.name);
 
   constructor(private readonly configService: ConfigService) {
-    this.logger.log('CaptchaService initialized (only detection, solving via Telegram)');
+    this.logger.log(
+      'CaptchaService initialized (only detection, solving via Telegram)',
+    );
   }
 
   /**
@@ -48,7 +55,10 @@ export class CaptchaService {
       // hCaptcha
       if (
         document.querySelector('iframe[src*="hcaptcha.com"]') ||
-        document.querySelector('[data-sitekey]')?.getAttribute('data-sitekey')?.includes('hcaptcha')
+        document
+          .querySelector('[data-sitekey]')
+          ?.getAttribute('data-sitekey')
+          ?.includes('hcaptcha')
       ) {
         return 'hcaptcha';
       }

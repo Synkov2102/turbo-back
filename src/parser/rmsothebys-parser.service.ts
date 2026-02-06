@@ -13,7 +13,10 @@ if (USE_STEALTH_PLUGIN) {
   try {
     PuppeteerExtra.use(StealthPlugin());
   } catch (error) {
-    console.warn('[RMSothebysParser] Failed to enable stealth plugin:', (error as Error).message);
+    console.warn(
+      '[RMSothebysParser] Failed to enable stealth plugin:',
+      (error as Error).message,
+    );
   }
 }
 
@@ -123,7 +126,7 @@ interface ParseAllLinksResult {
 export class RmsothebysParserService {
   private readonly logger = new Logger(RmsothebysParserService.name);
 
-  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) { }
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
 
   /**
    * Парсит все ссылки со страницы поиска RM Sotheby's
@@ -145,9 +148,7 @@ export class RmsothebysParserService {
     let browser: Browser | undefined = undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []),
-      );
+      browser = await PuppeteerExtra.launch(getBaseLaunchOptions(false, []));
 
       const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();
@@ -358,9 +359,7 @@ export class RmsothebysParserService {
     let browser: Browser | undefined = undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []),
-      );
+      browser = await PuppeteerExtra.launch(getBaseLaunchOptions(false, []));
 
       const incognitoContext = await browser.createIncognitoBrowserContext();
       const page = await incognitoContext.newPage();

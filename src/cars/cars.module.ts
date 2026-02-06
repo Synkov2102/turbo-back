@@ -6,9 +6,7 @@ import { CbrService } from './cbr.service';
 import { Car, CarSchema } from '../schemas/car.schema';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }]),
-  ],
+  imports: [MongooseModule.forFeature([{ name: Car.name, schema: CarSchema }])],
   controllers: [CarsController],
   providers: [CarsService, CbrService],
   exports: [CarsService],

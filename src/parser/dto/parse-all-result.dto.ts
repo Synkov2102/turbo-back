@@ -42,18 +42,7 @@ export class ParseAllResultDto {
         error: { type: 'string' },
       },
     },
-    example: [
-      { url: 'https://example.com/car1', error: 'Failed to parse' },
-    ],
+    example: [{ url: 'https://example.com/car1', error: 'Failed to parse' }],
   })
   errorsList: Array<{ url: string; error: string }>;
 }
-
-
-
-
-
-
-
-
-

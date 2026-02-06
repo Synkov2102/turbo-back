@@ -13,10 +13,3 @@ import { Post, PostSchema } from '../schemas/post.schema';
   exports: [PostsService],
 })
 export class PostsModule {}
-
-
-
-
-
-
-

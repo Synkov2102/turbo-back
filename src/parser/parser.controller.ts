@@ -76,7 +76,8 @@ export class ParserController {
 
   @Post('oldtimerfarm')
   @ApiOperation({
-    summary: 'Распарсить объявление с Oldtimerfarm.be и сохранить в базу данных',
+    summary:
+      'Распарсить объявление с Oldtimerfarm.be и сохранить в базу данных',
   })
   @ApiBody({ type: ParseAvitoDto })
   @ApiResponse({
@@ -178,7 +179,8 @@ export class ParserController {
 
   @Post('rmsothebys/parse')
   @ApiOperation({
-    summary: "Распарсить конкретное объявление с RM Sotheby's и сохранить в базу данных",
+    summary:
+      "Распарсить конкретное объявление с RM Sotheby's и сохранить в базу данных",
     description:
       "Парсит одну ссылку с RM Sotheby's, извлекает все данные об автомобиле и сохраняет/обновляет запись в базе данных",
   })
@@ -200,8 +202,7 @@ export class ParserController {
   @ApiOperation({
     summary: "Распарсить объявление с RM Sotheby's и сохранить в базу данных",
     deprecated: true,
-    description:
-      'Используйте /parser/rmsothebys/parse вместо этого эндпоинта',
+    description: 'Используйте /parser/rmsothebys/parse вместо этого эндпоинта',
   })
   @ApiBody({ type: ParseAvitoDto })
   @ApiResponse({
