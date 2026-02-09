@@ -13,5 +13,5 @@ export const CRON_RMSOTHEBYS = '0 0 3 * * *';
 /** Обновление цен в рублях — каждый день в 5:00 */
 export const CRON_UPDATE_PRICES_RUB = '0 0 5 * * *';
 
-/** Проверка статуса объявлений Auto.ru — каждые 5 минут */
-export const CRON_CHECK_AUTORU = '0 */5 * * * *';
+/** Парсинг постов из групп ВКонтакте — каждый день в 20:00 */
+export const CRON_VK_GROUPS = '0 0 20 * * *';

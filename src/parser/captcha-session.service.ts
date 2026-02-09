@@ -73,12 +73,12 @@ export class CaptchaSessionService {
 
   async getScreenshot(sessionId: string): Promise<Buffer> {
     const session = this.getSession(sessionId);
-    
+
     // Проверяем, что страница не закрыта
     if (session.page.isClosed()) {
       throw new Error('Page is closed');
     }
-    
+
     // Делаем скриншот полной страницы для лучшего качества
     const buffer = await session.page.screenshot({
       type: 'png',

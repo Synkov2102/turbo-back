@@ -336,7 +336,9 @@ export async function createBrowser(
   // Это критически важно для избежания "Target.createTarget timed out"
   // Согласно https://www.timsanteford.com/posts/how-to-fix-puppeteer-connection-error-protocolerror-network-enable-timed-out-in-docker/
   if (isDocker) {
-    console.log('[BrowserHelper] Waiting for browser to fully initialize in Docker...');
+    console.log(
+      '[BrowserHelper] Waiting for browser to fully initialize in Docker...',
+    );
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 
@@ -396,7 +398,10 @@ export async function createPage(
         // Задержка после создания контекста для инициализации (увеличена для Docker)
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
-        console.warn('[BrowserHelper] Failed to create incognito context, using default context:', (error as Error).message);
+        console.warn(
+          '[BrowserHelper] Failed to create incognito context, using default context:',
+          (error as Error).message,
+        );
         // Если не удалось создать инкогнито контекст, используем обычный
         page = await browser.newPage();
         if (page.isClosed()) {
@@ -419,19 +424,27 @@ export async function createPage(
       } catch (error) {
         const errorMessage = (error as Error).message || String(error);
         retries--;
-        if (errorMessage.includes('Target.createTarget timed out') ||
+        if (
+          errorMessage.includes('Target.createTarget timed out') ||
           errorMessage.includes('Protocol error') ||
-          errorMessage.includes('Target closed')) {
+          errorMessage.includes('Target closed')
+        ) {
           if (retries > 0) {
             const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
-            console.warn(`[BrowserHelper] Failed to create page in incognito context (${retries} retries left), waiting ${retryDelay}ms:`, errorMessage);
+            console.warn(
+              `[BrowserHelper] Failed to create page in incognito context (${retries} retries left), waiting ${retryDelay}ms:`,
+              errorMessage,
+            );
             await new Promise((resolve) => setTimeout(resolve, retryDelay));
             continue;
           }
         }
         // Если это другая ошибка или закончились попытки, пробуем обычную страницу
-        console.warn('[BrowserHelper] Failed to create page in incognito context, using default context:', errorMessage);
+        console.warn(
+          '[BrowserHelper] Failed to create page in incognito context, using default context:',
+          errorMessage,
+        );
         page = await browser.newPage();
         break;
       }
@@ -446,13 +459,18 @@ export async function createPage(
       } catch (error) {
         const errorMessage = (error as Error).message || String(error);
         retries--;
-        if (errorMessage.includes('Target.createTarget timed out') ||
+        if (
+          errorMessage.includes('Target.createTarget timed out') ||
           errorMessage.includes('Protocol error') ||
-          errorMessage.includes('Target closed')) {
+          errorMessage.includes('Target closed')
+        ) {
           if (retries > 0) {
             const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
-            console.warn(`[BrowserHelper] Failed to create page (${retries} retries left), waiting ${retryDelay}ms:`, errorMessage);
+            console.warn(
+              `[BrowserHelper] Failed to create page (${retries} retries left), waiting ${retryDelay}ms:`,
+              errorMessage,
+            );
             await new Promise((resolve) => setTimeout(resolve, retryDelay));
             continue;
           }
@@ -505,9 +523,11 @@ function setupConsoleFiltering(page: Page): void {
   page.on('console', (msg) => {
     const text = msg.text();
     // Игнорируем ошибки Next.js Server Actions, которые не критичны для парсинга
-    if (text.includes('Failed to find Server Action') ||
+    if (
+      text.includes('Failed to find Server Action') ||
       text.includes('failed-to-find-server-action') ||
-      text.includes('Server Action "x"')) {
+      text.includes('Server Action "x"')
+    ) {
       return; // Игнорируем эти ошибки
     }
     // Выводим только важные сообщения (ошибки и предупреждения)
@@ -520,15 +540,20 @@ function setupConsoleFiltering(page: Page): void {
   page.on('pageerror', (error) => {
     const errorMessage = error.message;
     // Игнорируем ошибки Next.js Server Actions
-    if (!errorMessage.includes('Failed to find Server Action') &&
+    if (
+      !errorMessage.includes('Failed to find Server Action') &&
       !errorMessage.includes('failed-to-find-server-action') &&
-      !errorMessage.includes('Server Action "x"')) {
+      !errorMessage.includes('Server Action "x"')
+    ) {
       console.log('[PAGE ERROR]:', errorMessage);
     }
   });
 }
 
-export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean = false): Promise<void> {
+export async function setupPage(
+  page: Page,
+  skipEvaluateOnNewDocument: boolean = false,
+): Promise<void> {
   // Настраиваем фильтрацию консольных сообщений для всех страниц
   setupConsoleFiltering(page);
   // Проверяем, что страница не закрыта перед началом настройки
@@ -564,7 +589,9 @@ export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean =
 
   // Пропускаем evaluateOnNewDocument для быстрых проверок статуса (может вызывать проблемы в Docker)
   if (skipEvaluateOnNewDocument) {
-    console.log('[BrowserHelper] Skipping evaluateOnNewDocument for quick status check');
+    console.log(
+      '[BrowserHelper] Skipping evaluateOnNewDocument for quick status check',
+    );
     // Добавляем задержку перед переходом (больше для Docker)
     const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
     if (isDocker) {
@@ -597,8 +624,8 @@ export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean =
       // Добавляем chrome объект
       (window as any).chrome = {
         runtime: {},
-        loadTimes: function () { },
-        csi: function () { },
+        loadTimes: function () {},
+        csi: function () {},
         app: {},
       };
 
@@ -629,7 +656,9 @@ export async function setupPage(page: Page, skipEvaluateOnNewDocument: boolean =
     // Если страница закрылась во время evaluateOnNewDocument, это нормально в некоторых случаях
     // (например, если контекст был закрыт)
     if (page.isClosed()) {
-      console.warn('[BrowserHelper] Page was closed during evaluateOnNewDocument, this may be expected in Docker');
+      console.warn(
+        '[BrowserHelper] Page was closed during evaluateOnNewDocument, this may be expected in Docker',
+      );
       // Не бросаем ошибку, так как это может быть нормальным поведением в Docker
       return;
     }
@@ -656,86 +685,86 @@ export async function isIpBlocked(page: Page): Promise<boolean> {
   }
   try {
     return await page.evaluate(() => {
-    const href = window.location.href.toLowerCase();
+      const href = window.location.href.toLowerCase();
 
-    // Редирект на страницу капчи Яндекса (Auto.ru → sso.passport.yandex.ru/showcaptcha)
-    if (
-      href.includes('passport.yandex.ru/showcaptcha') ||
-      href.includes('captcha.yandex.ru') ||
-      href.includes('smartcaptcha.yandex')
-    ) {
-      return true;
-    }
+      // Редирект на страницу капчи Яндекса (Auto.ru → sso.passport.yandex.ru/showcaptcha)
+      if (
+        href.includes('passport.yandex.ru/showcaptcha') ||
+        href.includes('captcha.yandex.ru') ||
+        href.includes('smartcaptcha.yandex')
+      ) {
+        return true;
+      }
 
-    const bodyText = (document.body?.textContent || '').toLowerCase();
-    const title = document.title.toLowerCase();
+      const bodyText = (document.body?.textContent || '').toLowerCase();
+      const title = document.title.toLowerCase();
 
-    // Сначала проверяем наличие основных элементов объявления
-    // Если они есть, значит страница не заблокирована
-    const hasCarTitle = !!document.querySelector('h1');
-    const hasCarPrice =
-      !!document.querySelector('[itemprop="price"]') ||
-      !!document.querySelector('[data-marker="item-view/item-price"]') ||
-      !!document.querySelector('[data-marker="item-view/price"]') ||
-      !!document.querySelector('#sale-data-attributes'); // Auto.ru
-    const hasMainContent =
-      !!document.querySelector('main') ||
-      !!document.querySelector('[data-marker="item-view"]') ||
-      !!document.querySelector('#sale-data-attributes'); // Auto.ru
+      // Сначала проверяем наличие основных элементов объявления
+      // Если они есть, значит страница не заблокирована
+      const hasCarTitle = !!document.querySelector('h1');
+      const hasCarPrice =
+        !!document.querySelector('[itemprop="price"]') ||
+        !!document.querySelector('[data-marker="item-view/item-price"]') ||
+        !!document.querySelector('[data-marker="item-view/price"]') ||
+        !!document.querySelector('#sale-data-attributes'); // Auto.ru
+      const hasMainContent =
+        !!document.querySelector('main') ||
+        !!document.querySelector('[data-marker="item-view"]') ||
+        !!document.querySelector('#sale-data-attributes'); // Auto.ru
 
-    // Если есть основные элементы объявления, страница точно не заблокирована
-    if (hasCarTitle && (hasCarPrice || hasMainContent)) {
-      return false;
-    }
+      // Если есть основные элементы объявления, страница точно не заблокирована
+      if (hasCarTitle && (hasCarPrice || hasMainContent)) {
+        return false;
+      }
 
-    // Проверяем специфичные признаки блокировки (более строгие проверки)
-    const specificBlockedIndicators = [
-      'проблема с ip',
-      'проблема с ip-адресом',
-      'ваш ip заблокирован',
-      'ip blocked',
-    ];
+      // Проверяем специфичные признаки блокировки (более строгие проверки)
+      const specificBlockedIndicators = [
+        'проблема с ip',
+        'проблема с ip-адресом',
+        'ваш ip заблокирован',
+        'ip blocked',
+      ];
 
-    // Проверяем наличие капчи Avito
-    const hasAvitoCaptcha =
-      !!document.querySelector('[class*="captcha"][class*="block"]') ||
-      !!document.querySelector('[id*="captcha"][id*="block"]') ||
-      !!document.querySelector('[data-marker*="captcha"]');
+      // Проверяем наличие капчи Avito
+      const hasAvitoCaptcha =
+        !!document.querySelector('[class*="captcha"][class*="block"]') ||
+        !!document.querySelector('[id*="captcha"][id*="block"]') ||
+        !!document.querySelector('[data-marker*="captcha"]');
 
-    // Проверяем наличие капчи Яндекса (для Auto.ru)
-    const hasYandexCaptcha =
-      !!document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
-      !!document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
-      !!document.querySelector('[class*="smart-captcha"]') ||
-      !!document.querySelector('[class*="yandex-captcha"]') ||
-      !!document.querySelector('[id*="smart-captcha"]') ||
-      !!document.querySelector('[id*="yandex-captcha"]') ||
-      !!document.querySelector('[data-captcha="yandex"]') ||
-      bodyText.includes('подтвердите, что вы не робот') ||
-      bodyText.includes('подтвердите что вы не робот') ||
-      bodyText.includes('я не робот') ||
-      bodyText.includes("i'm not a robot");
+      // Проверяем наличие капчи Яндекса (для Auto.ru)
+      const hasYandexCaptcha =
+        !!document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
+        !!document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
+        !!document.querySelector('[class*="smart-captcha"]') ||
+        !!document.querySelector('[class*="yandex-captcha"]') ||
+        !!document.querySelector('[id*="smart-captcha"]') ||
+        !!document.querySelector('[id*="yandex-captcha"]') ||
+        !!document.querySelector('[data-captcha="yandex"]') ||
+        bodyText.includes('подтвердите, что вы не робот') ||
+        bodyText.includes('подтвердите что вы не робот') ||
+        bodyText.includes('я не робот') ||
+        bodyText.includes("i'm not a robot");
 
-    // Проверяем наличие других элементов блокировки
-    const hasBlockedElements =
-      hasAvitoCaptcha ||
-      hasYandexCaptcha ||
-      !!document.querySelector('[class*="ip-blocked"]') ||
-      !!document.querySelector('[id*="ip-blocked"]') ||
-      !!document.querySelector('[class*="access-denied"]') ||
-      !!document.querySelector('[id*="access-denied"]');
+      // Проверяем наличие других элементов блокировки
+      const hasBlockedElements =
+        hasAvitoCaptcha ||
+        hasYandexCaptcha ||
+        !!document.querySelector('[class*="ip-blocked"]') ||
+        !!document.querySelector('[id*="ip-blocked"]') ||
+        !!document.querySelector('[class*="access-denied"]') ||
+        !!document.querySelector('[id*="access-denied"]');
 
-    // Проверяем, что в заголовке или основном тексте есть специфичные индикаторы блокировки
-    const hasBlockedText = specificBlockedIndicators.some(
-      (indicator) =>
-        (bodyText.includes(indicator) && bodyText.length < 500) || // Короткий текст + индикатор = блокировка
-        (title.includes(indicator) && title.length < 100),
-    );
+      // Проверяем, что в заголовке или основном тексте есть специфичные индикаторы блокировки
+      const hasBlockedText = specificBlockedIndicators.some(
+        (indicator) =>
+          (bodyText.includes(indicator) && bodyText.length < 500) || // Короткий текст + индикатор = блокировка
+          (title.includes(indicator) && title.length < 100),
+      );
 
-    // Проверяем, что страница очень короткая (признак страницы блокировки)
-    const isVeryShortPage = bodyText.length < 200 && !hasMainContent;
+      // Проверяем, что страница очень короткая (признак страницы блокировки)
+      const isVeryShortPage = bodyText.length < 200 && !hasMainContent;
 
-    return hasBlockedElements || hasBlockedText || isVeryShortPage;
+      return hasBlockedElements || hasBlockedText || isVeryShortPage;
     });
   } catch (error) {
     const errorMessage = (error as Error).message || String(error);
@@ -745,7 +774,9 @@ export async function isIpBlocked(page: Page): Promise<boolean> {
       errorMessage.includes('Target closed') ||
       page.isClosed()
     ) {
-      console.warn('[BrowserHelper] Page navigated during isIpBlocked check, assuming not blocked');
+      console.warn(
+        '[BrowserHelper] Page navigated during isIpBlocked check, assuming not blocked',
+      );
       return false;
     }
     // Для других ошибок пробрасываем дальше
@@ -762,44 +793,44 @@ export async function hasCaptcha(page: Page): Promise<boolean> {
   }
   try {
     return await page.evaluate(() => {
-    const href = window.location.href.toLowerCase();
+      const href = window.location.href.toLowerCase();
 
-    // Страница капчи Яндекса (Auto.ru редирект на showcaptcha)
-    if (
-      href.includes('passport.yandex.ru/showcaptcha') ||
-      href.includes('auto.ru/showcaptcha') ||
-      href.includes('captcha.yandex.ru') ||
-      href.includes('smartcaptcha.yandex')
-    ) {
-      return true;
-    }
+      // Страница капчи Яндекса (Auto.ru редирект на showcaptcha)
+      if (
+        href.includes('passport.yandex.ru/showcaptcha') ||
+        href.includes('auto.ru/showcaptcha') ||
+        href.includes('captcha.yandex.ru') ||
+        href.includes('smartcaptcha.yandex')
+      ) {
+        return true;
+      }
 
-    const bodyText = (document.body?.textContent || '').toLowerCase();
+      const bodyText = (document.body?.textContent || '').toLowerCase();
 
-    // Проверяем капчу Avito
-    const hasAvitoCaptcha =
-      !!document.querySelector('[class*="captcha"][class*="block"]') ||
-      !!document.querySelector('[id*="captcha"][id*="block"]') ||
-      !!document.querySelector('[data-marker*="captcha"]');
+      // Проверяем капчу Avito
+      const hasAvitoCaptcha =
+        !!document.querySelector('[class*="captcha"][class*="block"]') ||
+        !!document.querySelector('[id*="captcha"][id*="block"]') ||
+        !!document.querySelector('[data-marker*="captcha"]');
 
-    // Проверяем капчу Яндекса (для Auto.ru)
-    const hasYandexCaptcha =
-      !!document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
-      !!document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
-      !!document.querySelector('[class*="smart-captcha"]') ||
-      !!document.querySelector('[class*="yandex-captcha"]') ||
-      !!document.querySelector('[id*="smart-captcha"]') ||
-      !!document.querySelector('[id*="yandex-captcha"]') ||
-      !!document.querySelector('[data-captcha="yandex"]') ||
-      bodyText.includes('подтвердите, что вы не робот') ||
-      bodyText.includes('подтвердите что вы не робот') ||
-      bodyText.includes('подтвердите, что запросы отправляли вы') ||
-      bodyText.includes('вы не робот') ||
-      bodyText.includes('я не робот') ||
-      bodyText.includes("i'm not a robot") ||
-      bodyText.includes('smartcaptcha by yandex');
+      // Проверяем капчу Яндекса (для Auto.ru)
+      const hasYandexCaptcha =
+        !!document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
+        !!document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
+        !!document.querySelector('[class*="smart-captcha"]') ||
+        !!document.querySelector('[class*="yandex-captcha"]') ||
+        !!document.querySelector('[id*="smart-captcha"]') ||
+        !!document.querySelector('[id*="yandex-captcha"]') ||
+        !!document.querySelector('[data-captcha="yandex"]') ||
+        bodyText.includes('подтвердите, что вы не робот') ||
+        bodyText.includes('подтвердите что вы не робот') ||
+        bodyText.includes('подтвердите, что запросы отправляли вы') ||
+        bodyText.includes('вы не робот') ||
+        bodyText.includes('я не робот') ||
+        bodyText.includes("i'm not a robot") ||
+        bodyText.includes('smartcaptcha by yandex');
 
-    return hasAvitoCaptcha || hasYandexCaptcha;
+      return hasAvitoCaptcha || hasYandexCaptcha;
     });
   } catch (error) {
     const errorMessage = (error as Error).message || String(error);
@@ -809,7 +840,9 @@ export async function hasCaptcha(page: Page): Promise<boolean> {
       errorMessage.includes('Target closed') ||
       page.isClosed()
     ) {
-      console.warn('[BrowserHelper] Page navigated during hasCaptcha check, assuming no captcha');
+      console.warn(
+        '[BrowserHelper] Page navigated during hasCaptcha check, assuming no captcha',
+      );
       return false;
     }
     // Для других ошибок пробрасываем дальше
@@ -880,7 +913,9 @@ export async function waitForCaptchaSolutionWithRemote(
   while (Date.now() - startTime < maxWaitTime) {
     const clicks = await getPendingClicks(sessionId);
     if (clicks.length > 0) {
-      console.log(`[BrowserHelper] Processing ${clicks.length} clicks from phone`);
+      console.log(
+        `[BrowserHelper] Processing ${clicks.length} clicks from phone`,
+      );
     }
 
     for (const c of clicks) {
@@ -904,7 +939,8 @@ export async function waitForCaptchaSolutionWithRemote(
             documentHeight: document.documentElement.scrollHeight,
           }));
         } catch (evalError) {
-          const errorMessage = (evalError as Error).message || String(evalError);
+          const errorMessage =
+            (evalError as Error).message || String(evalError);
           // Если контекст выполнения был уничтожен из-за навигации, пропускаем этот клик
           if (
             errorMessage.includes('Execution context was destroyed') ||
@@ -924,7 +960,12 @@ export async function waitForCaptchaSolutionWithRemote(
         );
 
         // Проверяем, что координаты в пределах документа
-        if (c.x < 0 || c.y < 0 || c.x > pageInfo.documentWidth || c.y > pageInfo.documentHeight) {
+        if (
+          c.x < 0 ||
+          c.y < 0 ||
+          c.x > pageInfo.documentWidth ||
+          c.y > pageInfo.documentHeight
+        ) {
           console.warn(
             `[BrowserHelper] Click coordinates out of bounds: ${c.x}, ${c.y} (doc: ${pageInfo.documentWidth}x${pageInfo.documentHeight})`,
           );
@@ -932,23 +973,32 @@ export async function waitForCaptchaSolutionWithRemote(
         }
 
         // Прокручиваем страницу, чтобы элемент был виден (если нужно)
-        const visibleX = c.x >= pageInfo.scrollX && c.x <= pageInfo.scrollX + pageInfo.innerWidth;
-        const visibleY = c.y >= pageInfo.scrollY && c.y <= pageInfo.scrollY + pageInfo.innerHeight;
+        const visibleX =
+          c.x >= pageInfo.scrollX &&
+          c.x <= pageInfo.scrollX + pageInfo.innerWidth;
+        const visibleY =
+          c.y >= pageInfo.scrollY &&
+          c.y <= pageInfo.scrollY + pageInfo.innerHeight;
 
         if (!visibleX || !visibleY) {
           console.log(
             `[BrowserHelper] Scrolling to make click visible. Target: ${c.x}, ${c.y}`,
           );
           try {
-            await page.evaluate((x, y) => {
-              window.scrollTo({
-                left: Math.max(0, x - window.innerWidth / 2),
-                top: Math.max(0, y - window.innerHeight / 2),
-                behavior: 'smooth',
-              });
-            }, c.x, c.y);
+            await page.evaluate(
+              (x, y) => {
+                window.scrollTo({
+                  left: Math.max(0, x - window.innerWidth / 2),
+                  top: Math.max(0, y - window.innerHeight / 2),
+                  behavior: 'smooth',
+                });
+              },
+              c.x,
+              c.y,
+            );
           } catch (scrollError) {
-            const errorMessage = (scrollError as Error).message || String(scrollError);
+            const errorMessage =
+              (scrollError as Error).message || String(scrollError);
             if (
               errorMessage.includes('Execution context was destroyed') ||
               errorMessage.includes('Target closed') ||
@@ -976,7 +1026,8 @@ export async function waitForCaptchaSolutionWithRemote(
 
           console.log(`[BrowserHelper] Applied click at: ${c.x}, ${c.y}`);
         } catch (mouseError) {
-          const errorMessage = (mouseError as Error).message || String(mouseError);
+          const errorMessage =
+            (mouseError as Error).message || String(mouseError);
           if (
             errorMessage.includes('Execution context was destroyed') ||
             errorMessage.includes('Target closed') ||
@@ -997,7 +1048,9 @@ export async function waitForCaptchaSolutionWithRemote(
             await page.mouse.down();
             await randomDelay(100, 150);
             await page.mouse.up();
-            console.log(`[BrowserHelper] Applied click via down/up at: ${c.x}, ${c.y}`);
+            console.log(
+              `[BrowserHelper] Applied click via down/up at: ${c.x}, ${c.y}`,
+            );
           } catch (fallbackError) {
             console.warn(
               `[BrowserHelper] All click methods failed: ${(fallbackError as Error).message}`,
@@ -1124,14 +1177,20 @@ export async function navigateWithRetry(
         const errorMessage = (gotoError as Error).message || String(gotoError);
         // Если это ошибка "Requesting main frame too early!" (известная проблема в Puppeteer 20.6.0+)
         // См. https://github.com/puppeteer/puppeteer/issues/11246
-        if (errorMessage.includes('Requesting main frame too early') ||
+        if (
+          errorMessage.includes('Requesting main frame too early') ||
           errorMessage.includes('Session closed') ||
-          errorMessage.includes('Protocol error')) {
-          console.warn(`[BrowserHelper] Got "${errorMessage}" error on attempt ${attempt}`);
+          errorMessage.includes('Protocol error')
+        ) {
+          console.warn(
+            `[BrowserHelper] Got "${errorMessage}" error on attempt ${attempt}`,
+          );
           if (attempt < maxRetries) {
             // Увеличиваем задержку перед следующей попыткой для этой конкретной ошибки
             const extraDelay = isDocker ? 5000 : 2000;
-            console.log(`[BrowserHelper] Waiting additional ${extraDelay}ms before retry...`);
+            console.log(
+              `[BrowserHelper] Waiting additional ${extraDelay}ms before retry...`,
+            );
             await new Promise((resolve) => setTimeout(resolve, extraDelay));
             // Пробрасываем ошибку, чтобы цикл for сделал retry
             throw gotoError;

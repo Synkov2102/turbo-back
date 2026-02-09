@@ -2,15 +2,17 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { Car, CarDocument } from '../schemas/car.schema';
 import {
   CRON_OLDTIMERFARM,
   CRON_RMSOTHEBYS,
   CRON_UPDATE_PRICES_RUB,
-  CRON_CHECK_AUTORU,
+  CRON_VK_GROUPS,
 } from '../constants/cron.constants';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
+import { VkParserService } from './vk-parser.service';
 import { CarsService } from '../cars/cars.service';
 import { StatusCheckerService } from './status-checker.service';
 
@@ -23,8 +25,10 @@ export class CronParserService {
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
     private readonly oldtimerfarmParser: OldtimerfarmParserService,
     private readonly rmsothebysParser: RmsothebysParserService,
+    private readonly vkParserService: VkParserService,
     private readonly carsService: CarsService,
     private readonly statusCheckerService: StatusCheckerService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -74,17 +78,16 @@ export class CronParserService {
   }
 
   /**
-   * Cron job для проверки статуса объявлений Auto.ru
-   * ОТКЛЮЧЕНО: декоратор @Cron закомментирован
+   * Cron job для парсинга постов из групп ВКонтакте
    */
-  // @Cron(CRON_CHECK_AUTORU)
-  async checkAutoRuCron() {
-    this.logger.log('Запуск cron job для проверки объявлений Auto.ru');
+  @Cron(CRON_VK_GROUPS)
+  async parseVkGroupsCron() {
+    this.logger.log('Запуск cron job для парсинга групп ВКонтакте');
     try {
-      await this.checkAutoRuCars();
+      await this.parseVkGroups();
     } catch (error) {
       this.logger.error(
-        `Ошибка при проверке Auto.ru: ${(error as Error).message}`,
+        `Ошибка при парсинге групп ВК: ${(error as Error).message}`,
       );
     }
   }
@@ -371,6 +374,102 @@ export class CronParserService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Парсинг постов из групп ВКонтакте
+   * Читает список групп из переменной окружения VK_GROUPS_TO_PARSE
+   * Формат: группы через запятую, например: "turbo_journal_vk,club123456"
+   */
+  async parseVkGroups(): Promise<void> {
+    const groupsToParse = this.configService.get<string>('VK_GROUPS_TO_PARSE');
+
+    if (!groupsToParse || groupsToParse.trim().length === 0) {
+      this.logger.warn(
+        'VK_GROUPS_TO_PARSE не установлен. Парсинг групп ВК пропущен.',
+      );
+      return;
+    }
+
+    const groups = this.parseGroupsList(groupsToParse);
+    if (groups.length === 0) {
+      this.logger.warn('Список групп ВК пуст. Парсинг пропущен.');
+      return;
+    }
+
+    this.logger.log(
+      `Начало парсинга ${groups.length} групп ВК: ${groups.join(', ')}`,
+    );
+
+    const defaultPostCount = 20;
+    const delayBetweenGroups = 2000; // 2 секунды между группами для соблюдения лимитов API
+
+    for (let i = 0; i < groups.length; i++) {
+      const groupId = groups[i];
+
+      try {
+        await this.parseSingleVkGroup(
+          groupId,
+          i + 1,
+          groups.length,
+          defaultPostCount,
+        );
+
+        // Задержка между группами (кроме последней)
+        if (i < groups.length - 1) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, delayBetweenGroups),
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Ошибка при парсинге группы ${groupId}: ${(error as Error).message}`,
+        );
+        // Продолжаем парсинг других групп даже при ошибке
+      }
+    }
+
+    this.logger.log('Парсинг всех групп ВК завершен');
+  }
+
+  /**
+   * Парсит одну группу ВК
+   * @param groupId - ID группы или короткое имя
+   * @param currentIndex - Текущий индекс группы (для логов)
+   * @param totalGroups - Общее количество групп (для логов)
+   * @param postCount - Количество постов для парсинга
+   */
+  private async parseSingleVkGroup(
+    groupId: string,
+    currentIndex: number,
+    totalGroups: number,
+    postCount: number,
+  ): Promise<void> {
+    this.logger.log(
+      `Парсинг группы ${currentIndex}/${totalGroups}: ${groupId}`,
+    );
+
+    const result = await this.vkParserService.parseAndSavePosts({
+      groupId,
+      count: postCount,
+      offset: 0,
+    });
+
+    this.logger.log(
+      `Группа ${groupId}: получено ${result.parsed}, сохранено ${result.saved}, пропущено ${result.skipped}, ошибок ${result.errors}`,
+    );
+  }
+
+  /**
+   * Парсит строку со списком групп ВК
+   * @param groupsString - Строка с группами через запятую
+   * @returns Массив ID групп
+   */
+  private parseGroupsList(groupsString: string): string[] {
+    return groupsString
+      .split(',')
+      .map((g) => g.trim())
+      .filter((g) => g.length > 0);
   }
 
   /**

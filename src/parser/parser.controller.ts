@@ -21,8 +21,10 @@ import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 import { CronParserService } from './cron-parser.service';
+import { VkParserService } from './vk-parser.service';
 import { Car } from '../schemas/car.schema';
 import { ParseAvitoDto } from './dto/parse-avito.dto';
+import { ParseVkGroupDto } from './dto/parse-vk-group.dto';
 import { StatusCheckResultDto } from './dto/status-check-result.dto';
 import { StatusCheckResult } from './interfaces/status-check-result.interface';
 
@@ -36,6 +38,7 @@ export class ParserController {
     private readonly rmsothebysParserService: RmsothebysParserService,
     private readonly statusCheckerService: StatusCheckerService,
     private readonly cronParserService: CronParserService,
+    private readonly vkParserService: VkParserService,
   ) {}
 
   @Post('avito')
@@ -261,5 +264,75 @@ export class ParserController {
   async checkAutoRuCars(): Promise<{ message: string }> {
     await this.cronParserService.checkAutoRuCars();
     return { message: 'Проверка Auto.ru завершена' };
+  }
+
+  @Post('vk/parse-group')
+  @ApiOperation({
+    summary: 'Распарсить посты из группы ВКонтакте',
+    description:
+      'Парсит посты из указанной группы ВК через API и сохраняет их в базу данных. Поддерживает числовой ID группы, короткое имя (screen_name) или префиксы club/public.',
+  })
+  @ApiBody({ type: ParseVkGroupDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Парсинг завершен',
+    schema: {
+      type: 'object',
+      properties: {
+        parsed: { type: 'number', description: 'Количество полученных постов' },
+        saved: { type: 'number', description: 'Количество сохраненных постов' },
+        skipped: {
+          type: 'number',
+          description: 'Количество пропущенных (уже существующих) постов',
+        },
+        errors: {
+          type: 'number',
+          description: 'Количество ошибок при сохранении',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверные параметры запроса',
+  })
+  async parseVkGroup(@Body() dto: ParseVkGroupDto): Promise<{
+    parsed: number;
+    saved: number;
+    skipped: number;
+    errors: number;
+  }> {
+    return this.vkParserService.parseAndSavePosts(dto);
+  }
+
+  @Get('vk/group-info/:groupId')
+  @ApiOperation({
+    summary: 'Получить информацию о группе ВКонтакте',
+    description:
+      'Возвращает информацию о группе ВК: ID, название, короткое имя (screen_name).',
+  })
+  @ApiParam({
+    name: 'groupId',
+    description: 'ID группы ВК или короткое имя',
+    example: 'club123456 или auto_sales',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Информация о группе',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'ID группы' },
+        name: { type: 'string', description: 'Название группы' },
+        screen_name: { type: 'string', description: 'Короткое имя группы' },
+      },
+    },
+  })
+  async getVkGroupInfo(@Param('groupId') groupId: string): Promise<{
+    id: number;
+    name: string;
+    screen_name: string;
+  }> {
+    return this.vkParserService.getGroupInfo(groupId);
   }
 }

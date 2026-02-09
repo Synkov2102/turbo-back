@@ -52,6 +52,7 @@ export const PostSchema = SchemaFactory.createForClass(Post);
 
 // Индексы для оптимизации запросов
 PostSchema.index({ createdAt: -1 }); // Для сортировки по дате (новые сначала)
+PostSchema.index({ url: 1 }, { unique: true, sparse: true }); // Уникальный индекс для предотвращения дубликатов
 
 // Disable version key to remove __v from documents
 PostSchema.set('versionKey', false);

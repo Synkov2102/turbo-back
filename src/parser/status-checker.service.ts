@@ -41,7 +41,9 @@ export class StatusCheckerService {
           );
 
           if (page.isClosed()) {
-            console.error('[StatusChecker] Page is closed, cannot create session');
+            console.error(
+              '[StatusChecker] Page is closed, cannot create session',
+            );
             return null;
           }
 
@@ -51,13 +53,17 @@ export class StatusCheckerService {
           // Ждем загрузки капчи перед скриншотом
           try {
             // Ждем появления элементов капчи на странице
-            console.log('[StatusChecker] Waiting for captcha elements to appear...');
+            console.log(
+              '[StatusChecker] Waiting for captcha elements to appear...',
+            );
             await page
               .waitForFunction(
                 () => {
                   // Проверяем наличие элементов Яндекс капчи
                   const hasYandexCaptcha =
-                    document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
+                    document.querySelector(
+                      'iframe[src*="captcha.yandex.ru"]',
+                    ) ||
                     document.querySelector(
                       'iframe[src*="smartcaptcha.yandex.ru"]',
                     ) ||
@@ -91,7 +97,9 @@ export class StatusCheckerService {
               });
 
             // Дополнительная задержка для полной загрузки капчи
-            console.log('[StatusChecker] Waiting additional 2s for captcha to fully load...');
+            console.log(
+              '[StatusChecker] Waiting additional 2s for captcha to fully load...',
+            );
             await new Promise((resolve) => setTimeout(resolve, 2000));
 
             // Прокручиваем страницу к капче, если она не видна
@@ -99,13 +107,17 @@ export class StatusCheckerService {
               await page.evaluate(() => {
                 const captchaElement =
                   document.querySelector('iframe[src*="captcha.yandex.ru"]') ||
-                  document.querySelector('iframe[src*="smartcaptcha.yandex.ru"]') ||
+                  document.querySelector(
+                    'iframe[src*="smartcaptcha.yandex.ru"]',
+                  ) ||
                   document.querySelector('[class*="smart-captcha"]') ||
                   document.querySelector('[class*="yandex-captcha"]') ||
                   document.querySelector('[id*="smart-captcha"]') ||
                   document.querySelector('[id*="yandex-captcha"]') ||
                   document.querySelector('[data-captcha="yandex"]') ||
-                  document.querySelector('[class*="captcha"][class*="block"]') ||
+                  document.querySelector(
+                    '[class*="captcha"][class*="block"]',
+                  ) ||
                   document.querySelector('[id*="captcha"][id*="block"]') ||
                   document.querySelector('[data-marker*="captcha"]');
 
