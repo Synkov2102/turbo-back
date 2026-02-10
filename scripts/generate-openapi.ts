@@ -12,7 +12,9 @@ async function generateOpenApiSpec() {
     .setDescription('API для парсинга и работы с объявлениями об автомобилях')
     .setVersion('1.0')
     .addTag('cars', 'Операции с автомобилями')
-    .addTag('avito-parser', 'Парсинг объявлений с Avito')
+    .addTag('parser', 'Парсинг объявлений с Avito, Auto.ru, ВКонтакте и других источников')
+    .addTag('posts', 'Операции с постами из ВКонтакте')
+    .addTag('captcha', 'Работа с капчей')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

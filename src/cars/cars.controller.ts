@@ -15,6 +15,10 @@ import { FilterOptions } from './interfaces/filter-options.interface';
 import { PaginatedResponse } from './interfaces/paginated-response.interface';
 import { PaginatedResponseDto } from './dto/paginated-response.dto';
 import { FilterOptionsDto } from './dto/filter-options.dto';
+import {
+  BrandStatsResponseDto,
+  BrandStatDto,
+} from './dto/brand-stats.dto';
 
 @ApiTags('cars')
 @Controller('cars')
@@ -74,6 +78,27 @@ export class CarsController {
       return [];
     }
     return this.carsService.getModelsByBrand(query.brand);
+  }
+
+  @Get('stats/brands')
+  @ApiOperation({
+    summary: 'Получить статистику по брендам',
+    description:
+      'Возвращает список всех брендов с количеством автомобилей по каждому бренду. Отсортировано по убыванию количества.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Статистика по брендам',
+    type: BrandStatsResponseDto,
+  })
+  async getBrandStats(): Promise<BrandStatsResponseDto> {
+    const brands = await this.carsService.getBrandStats();
+    const total = brands.reduce((sum, item) => sum + item.count, 0);
+
+    return {
+      brands,
+      total,
+    };
   }
 
   @Post('prices/update-rubles')

@@ -191,42 +191,309 @@
     },
     "/parser/oldtimerfarm/parse-all": {
       "post": {
-        "description": "Парсит все объявления со страницы списка Oldtimerfarm, определяет тип транспорта и парсит только автомобили (пропускает мотоциклы).",
+        "description": "Парсит актуальные объявления с Oldtimerfarm: обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.",
         "operationId": "ParserController_parseAllOldtimerfarmCars",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Парсинг завершен"
+          }
+        },
+        "summary": "Парсинг Oldtimerfarm",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/rmsothebys/parse": {
+      "post": {
+        "description": "Парсит одну ссылку с RM Sotheby's, извлекает все данные об автомобиле и сохраняет/обновляет запись в базе данных",
+        "operationId": "ParserController_parseRmsothebysAd",
+        "parameters": [],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "listUrl": {
-                    "type": "string",
-                    "description": "URL страницы со списком объявлений",
-                    "example": "https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen",
-                    "default": "https://www.oldtimerfarm.be/en/collection-cars-for-sale.php?categorie=collectiewagen"
-                  }
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
                 }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить конкретное объявление с RM Sotheby's и сохранить в базу данных",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/rmsothebys": {
+      "post": {
+        "deprecated": true,
+        "description": "Используйте /parser/rmsothebys/parse вместо этого эндпоинта",
+        "operationId": "ParserController_parseRmsothebysAdOld",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить объявление с RM Sotheby's и сохранить в базу данных",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/rmsothebys/parse-all": {
+      "post": {
+        "description": "Парсит актуальные объявления с RM Sotheby's: обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.",
+        "operationId": "ParserController_parseAllRmsothebysCars",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Парсинг завершен"
+          }
+        },
+        "summary": "Парсинг RM Sotheby's",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/parse-full-cycle": {
+      "post": {
+        "description": "Парсинг Oldtimerfarm, парсинг RM Sothebys, обновление цен в рублях. Обновляет существующие, добавляет новые, помечает отсутствующие как removed.",
+        "operationId": "ParserController_runFullParseCycle",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Полный цикл парсинга завершен"
+          }
+        },
+        "summary": "Полный цикл парсинга",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/check-autoru": {
+      "post": {
+        "description": "Проверяет активные и unknown объявления Auto.ru, которые не проверялись более указанного количества дней (по умолчанию 7).",
+        "operationId": "ParserController_checkAutoRuCars",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Проверка завершена"
+          }
+        },
+        "summary": "Проверить статус объявлений Auto.ru",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/vk/parse-group": {
+      "post": {
+        "description": "Парсит посты из указанной группы ВК через API и сохраняет их в базу данных. Поддерживает числовой ID группы, короткое имя (screen_name) или префиксы club/public.",
+        "operationId": "ParserController_parseVkGroup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseVkGroupDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Результат глобального парсинга",
+            "description": "Парсинг завершен",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ParseAllResultDto"
+                  "type": "object",
+                  "properties": {
+                    "parsed": {
+                      "type": "number",
+                      "description": "Количество полученных постов"
+                    },
+                    "saved": {
+                      "type": "number",
+                      "description": "Количество сохраненных постов"
+                    },
+                    "skipped": {
+                      "type": "number",
+                      "description": "Количество пропущенных (уже существующих) постов"
+                    },
+                    "errors": {
+                      "type": "number",
+                      "description": "Количество ошибок при сохранении"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверные параметры запроса"
+          }
+        },
+        "summary": "Распарсить посты из группы ВКонтакте",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/vk/group-info/{groupId}": {
+      "get": {
+        "description": "Возвращает информацию о группе ВК: ID, название, короткое имя (screen_name).",
+        "operationId": "ParserController_getVkGroupInfo",
+        "parameters": [
+          {
+            "name": "groupId",
+            "required": true,
+            "in": "path",
+            "description": "ID группы ВК или короткое имя",
+            "schema": {
+              "example": "club123456 или auto_sales",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Информация о группе",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number",
+                      "description": "ID группы"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Название группы"
+                    },
+                    "screen_name": {
+                      "type": "string",
+                      "description": "Короткое имя группы"
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "summary": "Глобальный парсинг всех автомобилей со страницы Oldtimerfarm",
+        "summary": "Получить информацию о группе ВКонтакте",
         "tags": [
           "parser"
+        ]
+      }
+    },
+    "/captcha-solve/{sessionId}": {
+      "get": {
+        "operationId": "CaptchaController_captchaSolvePage",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Captcha"
+        ]
+      }
+    },
+    "/captcha-session/{id}/screenshot": {
+      "get": {
+        "operationId": "CaptchaController_getScreenshot",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Captcha"
+        ]
+      }
+    },
+    "/captcha-session/{id}/click": {
+      "post": {
+        "operationId": "CaptchaController_addClick",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Captcha"
         ]
       }
     },
@@ -474,6 +741,29 @@
         ]
       }
     },
+    "/cars/stats/brands": {
+      "get": {
+        "description": "Возвращает список всех брендов с количеством автомобилей по каждому бренду. Отсортировано по убыванию количества.",
+        "operationId": "CarsController_getBrandStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Статистика по брендам",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandStatsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Получить статистику по брендам",
+        "tags": [
+          "cars"
+        ]
+      }
+    },
     "/cars/prices/update-rubles": {
       "post": {
         "description": "Запрашивает актуальные курсы валют с сайта ЦБ РФ и обновляет цены в рублях для всех машин, у которых есть цена в USD или EUR",
@@ -678,8 +968,16 @@
       "description": "Операции с автомобилями"
     },
     {
-      "name": "avito-parser",
-      "description": "Парсинг объявлений с Avito"
+      "name": "parser",
+      "description": "Парсинг объявлений с Avito, Auto.ru, ВКонтакте и других источников"
+    },
+    {
+      "name": "posts",
+      "description": "Операции с постами из ВКонтакте"
+    },
+    {
+      "name": "captcha",
+      "description": "Работа с капчей"
     }
   ],
   "servers": [],
@@ -727,7 +1025,8 @@
             "example": {
               "RUB": 1500000,
               "USD": 16000,
-              "EUR": 15000
+              "EUR": 15000,
+              "GBP": 12000
             }
           },
           "mileage": {
@@ -797,6 +1096,30 @@
             "type": "string",
             "description": "Дата последней проверки статуса",
             "example": "2024-01-01T00:00:00.000Z"
+          },
+          "listingType": {
+            "type": "string",
+            "description": "Тип объявления: аукцион или простое объявление",
+            "example": "auction",
+            "enum": [
+              "auction",
+              "listing"
+            ]
+          },
+          "auctionDate": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Дата аукциона (только для аукционов)",
+            "example": "2024-03-15T00:00:00.000Z"
+          },
+          "startingPrice": {
+            "type": "object",
+            "description": "Начальная цена (цена от) для аукционов",
+            "example": {
+              "USD": 100000,
+              "EUR": 90000,
+              "GBP": 80000
+            }
           }
         },
         "required": [
@@ -880,65 +1203,29 @@
           "changed"
         ]
       },
-      "ParseAllResultDto": {
+      "ParseVkGroupDto": {
         "type": "object",
         "properties": {
-          "total": {
+          "groupId": {
+            "type": "string",
+            "description": "ID группы ВК или короткое имя (screen_name)",
+            "example": "club123456 или auto_sales"
+          },
+          "count": {
             "type": "number",
-            "description": "Общее количество найденных объявлений",
-            "example": 150
+            "description": "Количество постов для парсинга (максимум 100)",
+            "example": 20,
+            "default": 20
           },
-          "parsed": {
+          "offset": {
             "type": "number",
-            "description": "Количество успешно распарсенных автомобилей",
-            "example": 120
-          },
-          "skipped": {
-            "type": "number",
-            "description": "Количество пропущенных объявлений (мотоциклы и т.д.)",
-            "example": 20
-          },
-          "errors": {
-            "type": "number",
-            "description": "Количество ошибок при парсинге",
-            "example": 10
-          },
-          "cars": {
-            "description": "Список распарсенных автомобилей",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Car"
-            }
-          },
-          "errorsList": {
-            "type": "array",
-            "description": "Список ошибок с URL объявлений",
-            "items": {
-              "type": "object",
-              "properties": {
-                "url": {
-                  "type": "string"
-                },
-                "error": {
-                  "type": "string"
-                }
-              }
-            },
-            "example": [
-              {
-                "url": "https://example.com/car1",
-                "error": "Failed to parse"
-              }
-            ]
+            "description": "Смещение для пагинации",
+            "example": 0,
+            "default": 0
           }
         },
         "required": [
-          "total",
-          "parsed",
-          "skipped",
-          "errors",
-          "cars",
-          "errorsList"
+          "groupId"
         ]
       },
       "PaginationMetaDto": {
@@ -1098,6 +1385,46 @@
           "maxPrice",
           "minEngineVolume",
           "maxEngineVolume"
+        ]
+      },
+      "BrandStatDto": {
+        "type": "object",
+        "properties": {
+          "brand": {
+            "type": "string",
+            "description": "Название бренда",
+            "example": "Toyota"
+          },
+          "count": {
+            "type": "number",
+            "description": "Количество автомобилей данного бренда",
+            "example": 42
+          }
+        },
+        "required": [
+          "brand",
+          "count"
+        ]
+      },
+      "BrandStatsResponseDto": {
+        "type": "object",
+        "properties": {
+          "brands": {
+            "description": "Массив статистики по брендам",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrandStatDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Общее количество автомобилей",
+            "example": 150
+          }
+        },
+        "required": [
+          "brands",
+          "total"
         ]
       },
       "CreatePostDto": {

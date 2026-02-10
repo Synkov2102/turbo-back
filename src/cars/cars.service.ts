@@ -520,4 +520,51 @@ export class CarsService {
       throw error;
     }
   }
+
+  /**
+   * Получает статистику по брендам: количество автомобилей по каждому бренду
+   * @returns Массив объектов с брендом и количеством автомобилей, отсортированный по убыванию количества
+   */
+  async getBrandStats(): Promise<Array<{ brand: string; count: number }>> {
+    try {
+      const stats = await this.carModel.aggregate([
+        // Фильтруем только документы с указанным брендом (не null и не пустая строка)
+        {
+          $match: {
+            brand: {
+              $exists: true,
+              $nin: [null, ''], // Не равно null и не равно пустой строке
+            },
+            status: { $ne: 'sold' }, // Исключаем проданные автомобили
+          },
+        },
+        // Группируем по бренду и считаем количество
+        {
+          $group: {
+            _id: '$brand',
+            count: { $sum: 1 },
+          },
+        },
+        // Переименовываем _id в brand
+        {
+          $project: {
+            _id: 0,
+            brand: '$_id',
+            count: 1,
+          },
+        },
+        // Сортируем по убыванию количества
+        {
+          $sort: { count: -1 },
+        },
+      ]);
+
+      return stats;
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при получении статистики по брендам: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
 }
