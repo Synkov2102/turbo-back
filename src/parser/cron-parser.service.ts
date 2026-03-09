@@ -5,16 +5,17 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Car, CarDocument } from '../schemas/car.schema';
 import {
-  CRON_OLDTIMERFARM,
-  CRON_RMSOTHEBYS,
-  CRON_UPDATE_PRICES_RUB,
   CRON_VK_GROUPS,
+  CRON_FULL_PARSE_CYCLE,
 } from '../constants/cron.constants';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
 import { VkParserService } from './vk-parser.service';
 import { CarsService } from '../cars/cars.service';
 import { StatusCheckerService } from './status-checker.service';
+import { ParallelParserHelper } from './utils/parallel-parser.helper';
+import { BrowserPool } from './utils/browser-pool.service';
+import { DEFAULT_HEADLESS } from './utils/browser-helper';
 
 @Injectable()
 export class CronParserService {
@@ -31,51 +32,6 @@ export class CronParserService {
     private readonly configService: ConfigService,
   ) {}
 
-  /**
-   * Cron job для парсинга OldTimerFarm
-   */
-  @Cron(CRON_OLDTIMERFARM)
-  async parseOldtimerfarmCron() {
-    if (this.isRunning) {
-      this.logger.warn('Парсинг уже выполняется, пропускаем запуск cron job');
-      return;
-    }
-
-    this.logger.log('Запуск cron job для парсинга OldTimerFarm');
-    await this.parseOldtimerfarm();
-  }
-
-  /**
-   * Cron job для парсинга RMSothebys
-   */
-  @Cron(CRON_RMSOTHEBYS)
-  async parseRmsothebysCron() {
-    if (this.isRunning) {
-      this.logger.warn('Парсинг уже выполняется, пропускаем запуск cron job');
-      return;
-    }
-
-    this.logger.log('Запуск cron job для парсинга RMSothebys');
-    await this.parseRmsothebys();
-  }
-
-  /**
-   * Cron job для обновления цен в рублях
-   */
-  @Cron(CRON_UPDATE_PRICES_RUB)
-  async updatePricesCron() {
-    this.logger.log('Запуск cron job для обновления цен в рублях');
-    try {
-      const result = await this.carsService.updatePricesInRubles();
-      this.logger.log(
-        `Обновление цен завершено: обновлено ${result.updated} машин`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Ошибка при обновлении цен: ${(error as Error).message}`,
-      );
-    }
-  }
 
   /**
    * Cron job для парсинга постов из групп ВКонтакте
@@ -88,6 +44,26 @@ export class CronParserService {
     } catch (error) {
       this.logger.error(
         `Ошибка при парсинге групп ВК: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Cron job для полного цикла парсинга: OldTimerFarm -> RM Sotheby's -> обновление валют
+   */
+  @Cron(CRON_FULL_PARSE_CYCLE)
+  async runFullParseCycleCron() {
+    if (this.isRunning) {
+      this.logger.warn('Парсинг уже выполняется, пропускаем запуск cron job');
+      return;
+    }
+
+    this.logger.log('Запуск cron job для полного цикла парсинга');
+    try {
+      await this.runFullParseCycle();
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при выполнении полного цикла парсинга: ${(error as Error).message}`,
       );
     }
   }
@@ -222,26 +198,41 @@ export class CronParserService {
       let parsedCount = 0;
       let errorCount = 0;
 
-      // Парсим каждое объявление
-      for (let i = 0; i < linksResult.links.length; i++) {
-        const url = linksResult.links[i];
-        this.logger.log(`Парсинг ${i + 1}/${linksResult.links.length}: ${url}`);
+      // Инициализируем пул браузеров для переиспользования
+      const browserPool = new BrowserPool('RmsothebysParser');
+      await browserPool.initialize(DEFAULT_HEADLESS ?? true, []);
 
-        try {
-          const car = await this.rmsothebysParser.parseAndSave(url);
-          if (car && car.url) {
-            parsedUrls.add(car.url.toLowerCase());
+      try {
+        // Парсим объявления параллельно (по 5 одновременно с переиспользованием браузера)
+        const parseResults =
+          await ParallelParserHelper.processInParallelWithDelay(
+            linksResult.links,
+            async (url, index) => {
+              this.logger.log(
+                `Парсинг ${index + 1}/${linksResult.links.length}: ${url}`,
+              );
+              return await this.rmsothebysParser.parseAndSaveWithPool(
+                url,
+                browserPool,
+              );
+            },
+            5, // Увеличено до 5 благодаря переиспользованию браузера
+            500, // Уменьшена задержка до 500мс
+            this.logger,
+          );
+
+        // Обрабатываем результаты
+        for (const parseResult of parseResults) {
+          if (parseResult.error) {
+            errorCount++;
+          } else if (parseResult.result && parseResult.result.url) {
+            parsedUrls.add(parseResult.result.url.toLowerCase());
             parsedCount++;
           }
-
-          // Небольшая задержка между запросами
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        } catch (error) {
-          errorCount++;
-          this.logger.error(
-            `Ошибка при парсинге ${url}: ${(error as Error).message}`,
-          );
         }
+      } finally {
+        // Очищаем пул браузеров
+        await browserPool.cleanup();
       }
 
       this.logger.log(

@@ -68,6 +68,9 @@ ENV TMPDIR=/tmp
 ENV HOME=/tmp
 ENV XDG_CACHE_HOME=/tmp/.cache
 ENV XDG_CONFIG_HOME=/tmp/.config
+# Отключаем X server для headless режима
+ENV DISPLAY=
+ENV DBUS_SESSION_BUS_ADDRESS=
 
 WORKDIR /app
 

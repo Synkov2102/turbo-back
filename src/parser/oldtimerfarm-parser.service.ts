@@ -1,27 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import PuppeteerExtra from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import type { Browser } from 'puppeteer';
+import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
-import { getBaseLaunchOptions } from './utils/browser-helper';
-
-// Используем stealth plugin только если он включен через переменную окружения
-const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
-if (USE_STEALTH_PLUGIN) {
-  try {
-    PuppeteerExtra.use(StealthPlugin());
-  } catch (error) {
-    console.warn(
-      '[OldtimerfarmParser] Failed to enable stealth plugin:',
-      (error as Error).message,
-    );
-  }
-}
-
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91 Safari/537.36';
+import { BaseParserService } from './utils/base-parser.service';
+import { DEFAULT_HEADLESS } from './utils/browser-helper';
+import { ParallelParserHelper } from './utils/parallel-parser.helper';
+import { BrowserPool } from './utils/browser-pool.service';
 
 interface CarLink {
   url: string;
@@ -38,13 +23,17 @@ interface ParseAllResult {
 }
 
 @Injectable()
-export class OldtimerfarmParserService {
-  private readonly logger = new Logger(OldtimerfarmParserService.name);
+export class OldtimerfarmParserService extends BaseParserService {
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {
+    super(OldtimerfarmParserService.name);
+  }
 
-  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
-
-  async parseAndSave(
+  /**
+   * Парсит и сохраняет автомобиль (версия с переиспользованием браузера)
+   */
+  async parseAndSaveWithPool(
     url: string,
+    browserPool: BrowserPool,
     skipMotorcycles: boolean = false,
   ): Promise<Car | null> {
     // Валидация URL - проверяем что это oldtimerfarm.be
@@ -52,32 +41,23 @@ export class OldtimerfarmParserService {
       throw new Error('URL должен быть с домена oldtimerfarm.be');
     }
 
-    let browser: Browser | undefined;
+    let page: Page | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
-      );
-
-      // Создаем страницу в инкогнито контексте
-      const incognitoContext = await browser.createIncognitoBrowserContext();
-      const page = await incognitoContext.newPage();
-      await page.setUserAgent(USER_AGENT);
-
-      // немного человечных заголовков
-      await page.setExtraHTTPHeaders({
+      // Получаем страницу из пула браузеров
+      page = await browserPool.getPage(true, {
         'accept-language': 'en-US,en;q=0.9,nl;q=0.8,fr;q=0.7,de;q=0.6',
       });
 
-      console.log('[OldtimerfarmParser] Opening page:', url);
+      this.logger.log(`[OldtimerfarmParser] Opening page: ${url}`);
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 0 });
 
-      // Ждем загрузки основных элементов
+      // Ждем загрузки основных элементов (уменьшен таймаут с 10 минут до 30 секунд)
       await page.waitForSelector('h1', {
-        timeout: 10 * 60 * 1000,
+        timeout: 30000,
       });
       await page.waitForSelector('#specifications', {
-        timeout: 10 * 60 * 1000,
+        timeout: 30000,
       });
 
       // Если нужно пропускать мотоциклы, проверяем тип транспорта
@@ -101,7 +81,7 @@ export class OldtimerfarmParserService {
         return h1?.textContent?.trim() || document.title || '';
       });
 
-      console.log('[OldtimerfarmParser] Title:', title);
+      this.logger.log(`[OldtimerfarmParser] Title: ${title}`);
 
       // ---------- Спецификации ----------
       const specifications = await page.evaluate(() => {
@@ -126,15 +106,17 @@ export class OldtimerfarmParserService {
         return specs;
       });
 
-      console.log('[OldtimerfarmParser] Specifications:', specifications);
+      this.logger.debug(
+        `[OldtimerfarmParser] Specifications: ${JSON.stringify(specifications)}`,
+      );
 
       // ---------- Цена ----------
-      const priceText = (await page.evaluate(() => {
+      const priceText = await page.evaluate(() => {
         const priceElement =
           document.querySelector('.price') ||
           document.querySelector('#specifications [strong="Price"] + span');
         return priceElement?.textContent?.trim() || '';
-      })) as string;
+      });
 
       const priceValue = parseInt(priceText.replace(/[^\d]/g, '')) || 0;
       const priceTextLower = priceText.toLowerCase();
@@ -306,7 +288,7 @@ export class OldtimerfarmParserService {
         return Array.from(urls);
       });
 
-      console.log('[OldtimerfarmParser] Images found:', images.length);
+      this.logger.log(`[OldtimerfarmParser] Images found: ${images.length}`);
 
       // ---------- Подготавливаем данные ----------
       // Убираем год из заголовка, если он там есть (например, '71)
@@ -333,7 +315,9 @@ export class OldtimerfarmParserService {
         images: images,
       };
 
-      console.log('[OldtimerfarmParser] FINAL CAR DATA:', carData);
+      this.logger.debug(
+        `[OldtimerfarmParser] FINAL CAR DATA: ${JSON.stringify(carData)}`,
+      );
 
       // Проверяем, существует ли уже автомобиль с таким URL
       const existingCar = await this.carModel.findOne({ url }).exec();
@@ -357,13 +341,110 @@ export class OldtimerfarmParserService {
 
       return await car.save();
     } catch (e) {
-      console.error('[OldtimerfarmParser] Parse error:', e);
+      this.logger.error(
+        `[OldtimerfarmParser] Parse error: ${(e as Error).message}`,
+        (e as Error).stack,
+      );
+      throw new Error(
+        `Failed to parse Oldtimerfarm ad: ${(e as Error).message}`,
+      );
+    } finally {
+      if (page) {
+        await browserPool.releasePage(page);
+      }
+    }
+  }
+
+  /**
+   * Парсит и сохраняет автомобиль (оригинальная версия с созданием браузера)
+   */
+  async parseAndSave(
+    url: string,
+    skipMotorcycles: boolean = false,
+  ): Promise<Car | null> {
+    // Валидация URL - проверяем что это oldtimerfarm.be
+    if (!url.includes('oldtimerfarm.be')) {
+      throw new Error('URL должен быть с домена oldtimerfarm.be');
+    }
+
+    let browser: Browser | undefined;
+
+    try {
+      // В Docker всегда используется headless режим (автоматически в getBaseLaunchOptions)
+      // Локально можно использовать false для решения капчи вручную
+      const useHeadless =
+        process.env.NODE_ENV === 'production' ? DEFAULT_HEADLESS : false;
+      const { browser: browserInstance, page } = await this.setupBrowserAndPage(
+        useHeadless,
+        [],
+        true,
+        {
+          'accept-language': 'en-US,en;q=0.9,nl;q=0.8,fr;q=0.7,de;q=0.6',
+        },
+      );
+      browser = browserInstance;
+
+      this.logger.log(`[OldtimerfarmParser] Opening page: ${url}`);
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 0 });
+
+      // Ждем загрузки основных элементов
+      await page.waitForSelector('h1', {
+        timeout: 30000,
+      });
+      await page.waitForSelector('#specifications', {
+        timeout: 30000,
+      });
+
+      // Если нужно пропускать мотоциклы, проверяем тип транспорта
+      if (skipMotorcycles) {
+        const vehicleType = await this.getVehicleTypeFromPage(page);
+        if (vehicleType === 'moto') {
+          this.logger.log(`[OldtimerfarmParser] Skipping motorcycle: ${url}`);
+          return null;
+        }
+        if (vehicleType === null) {
+          this.logger.warn(
+            `[OldtimerfarmParser] Could not determine vehicle type for: ${url}, skipping`,
+          );
+          return null;
+        }
+      }
+
+      // Закрываем существующую страницу и используем пул для переиспользования кода
+      const currentContext = page.browserContext();
+      await page.close();
+
+      const browserPool = new BrowserPool('OldtimerfarmParser');
+      // Устанавливаем существующий браузер и контекст в пул
+      (browserPool as any).browser = browser;
+      (browserPool as any).context = currentContext;
+      (browserPool as any).isInitialized = true;
+
+      try {
+        // Используем пул для создания новой страницы и парсинга
+        // parseAndSaveWithPool создаст новую страницу и загрузит URL заново
+        return await this.parseAndSaveWithPool(
+          url,
+          browserPool,
+          skipMotorcycles,
+        );
+      } finally {
+        // Очищаем ссылки на браузер и контекст (браузер будет закрыт в finally блоке выше)
+        (browserPool as any).browser = null;
+        (browserPool as any).context = null;
+        (browserPool as any).isInitialized = false;
+      }
+    } catch (e) {
+      this.logger.error(
+        `[OldtimerfarmParser] Parse error: ${(e as Error).message}`,
+        (e as Error).stack,
+      );
       throw new Error(
         `Failed to parse Oldtimerfarm ad: ${(e as Error).message}`,
       );
     } finally {
       if (browser) {
-        await browser.close();
+        await this.closeBrowser(browser);
       }
     }
   }
@@ -375,17 +456,18 @@ export class OldtimerfarmParserService {
     let browser: Browser | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-        ]), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
+      // В Docker всегда используется headless режим (автоматически в getBaseLaunchOptions)
+      // Локально можно использовать false для решения капчи вручную
+      const useHeadless =
+        process.env.NODE_ENV === 'production' ? DEFAULT_HEADLESS : false;
+      const { browser: browserInstance, page } = await this.setupBrowserAndPage(
+        useHeadless,
+        ['--no-sandbox', '--disable-setuid-sandbox'],
+        true,
       );
+      browser = browserInstance;
 
-      const incognitoContext = await browser.createIncognitoBrowserContext();
-      const page = await incognitoContext.newPage();
-      await page.setUserAgent(USER_AGENT);
-
+      // Устанавливаем дополнительные заголовки для Oldtimerfarm
       await page.setExtraHTTPHeaders({
         'accept-language': 'en-US,en;q=0.9,nl;q=0.8,fr;q=0.7,de;q=0.6',
       });
@@ -458,9 +540,7 @@ export class OldtimerfarmParserService {
         `Failed to get car links from list page: ${(e as Error).message}`,
       );
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await this.closeBrowser(browser);
     }
   }
 
@@ -470,7 +550,7 @@ export class OldtimerfarmParserService {
    * @returns 'car' для автомобилей, 'moto' для мотоциклов, null если не удалось определить
    */
   private async getVehicleTypeFromPage(
-    page: any,
+    page: Page,
   ): Promise<'car' | 'moto' | null> {
     // Ищем информацию о типе транспорта
     // Проверяем спецификации и другие элементы страницы
@@ -569,17 +649,18 @@ export class OldtimerfarmParserService {
     let browser: Browser | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-        ]), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
+      // В Docker всегда используется headless режим (автоматически в getBaseLaunchOptions)
+      // Локально можно использовать false для решения капчи вручную
+      const useHeadless =
+        process.env.NODE_ENV === 'production' ? DEFAULT_HEADLESS : false;
+      const { browser: browserInstance, page } = await this.setupBrowserAndPage(
+        useHeadless,
+        ['--no-sandbox', '--disable-setuid-sandbox'],
+        true,
       );
+      browser = browserInstance;
 
-      const incognitoContext = await browser.createIncognitoBrowserContext();
-      const page = await incognitoContext.newPage();
-      await page.setUserAgent(USER_AGENT);
-
+      // Устанавливаем дополнительные заголовки для Oldtimerfarm
       await page.setExtraHTTPHeaders({
         'accept-language': 'en-US,en;q=0.9,nl;q=0.8,fr;q=0.7,de;q=0.6',
       });
@@ -593,9 +674,7 @@ export class OldtimerfarmParserService {
       );
       return null;
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await this.closeBrowser(browser);
     }
   }
 
@@ -628,39 +707,51 @@ export class OldtimerfarmParserService {
         `[OldtimerfarmParser] Found ${carLinks.length} total listings`,
       );
 
-      // Парсим каждое объявление
-      for (let i = 0; i < carLinks.length; i++) {
-        const link = carLinks[i];
-        this.logger.log(
-          `[OldtimerfarmParser] Processing ${i + 1}/${carLinks.length}: ${link.url}`,
+      // Инициализируем пул браузеров для переиспользования
+      const browserPool = new BrowserPool('OldtimerfarmParser');
+      const useHeadless =
+        process.env.NODE_ENV === 'production' ? DEFAULT_HEADLESS : false;
+      await browserPool.initialize(useHeadless, []);
+
+      let parseResults: Array<{
+        item: { url: string; title: string };
+        result: Car | null;
+        error: string | null;
+      }> = [];
+
+      try {
+        // Парсим объявления параллельно (по 5 одновременно с переиспользованием браузера)
+        parseResults = await ParallelParserHelper.processInParallelWithDelay(
+          carLinks,
+          async (link, index) => {
+            this.logger.log(
+              `[OldtimerfarmParser] Parsing ${index + 1}/${carLinks.length}: ${link.url}`,
+            );
+            return await this.parseAndSaveWithPool(link.url, browserPool, true); // skipMotorcycles = true
+          },
+          5, // Увеличено до 5 благодаря переиспользованию браузера
+          500, // Уменьшена задержка до 500мс
+          this.logger,
         );
+      } finally {
+        // Очищаем пул браузеров
+        await browserPool.cleanup();
+      }
 
-        try {
-          // Парсим автомобиль (с автоматической проверкой типа транспорта)
-          this.logger.log(`[OldtimerfarmParser] Parsing: ${link.url}`);
-          const car = await this.parseAndSave(link.url, true); // skipMotorcycles = true
-
-          if (car === null) {
-            // Это мотоцикл или не удалось определить тип
-            result.skipped++;
-            continue;
-          }
-
-          result.cars.push(car);
-          result.parsed++;
-
-          // Небольшая задержка между запросами
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        } catch (error) {
+      // Обрабатываем результаты
+      for (const parseResult of parseResults) {
+        if (parseResult.error) {
           result.errors++;
-          const errorMessage = (error as Error).message;
           result.errorsList.push({
-            url: link.url,
-            error: errorMessage,
+            url: parseResult.item.url,
+            error: parseResult.error,
           });
-          this.logger.error(
-            `[OldtimerfarmParser] Error parsing ${link.url}: ${errorMessage}`,
-          );
+        } else if (parseResult.result === null) {
+          // Это мотоцикл или не удалось определить тип
+          result.skipped++;
+        } else {
+          result.cars.push(parseResult.result);
+          result.parsed++;
         }
       }
 

@@ -15,3 +15,7 @@ export const CRON_UPDATE_PRICES_RUB = '0 0 5 * * *';
 
 /** Парсинг постов из групп ВКонтакте — каждый день в 20:00 */
 export const CRON_VK_GROUPS = '0 0 20 * * *';
+
+// Полный цикл парсинга: OldTimerFarm -> RM Sotheby's -> обновление валют
+// Запускается каждый день в 19:20
+export const CRON_FULL_PARSE_CYCLE = '0 20 19 * * *';

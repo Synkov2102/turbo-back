@@ -171,26 +171,74 @@ export function getBaseLaunchOptions(
   headless: boolean = DEFAULT_HEADLESS,
   additionalArgs: string[] = [],
 ): Parameters<typeof puppeteer.launch>[0] {
+  const isDocker =
+    !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+    process.env.NODE_ENV === 'production';
+
+  // В Docker всегда используем headless режим, даже если передан false
+  // Это необходимо, так как в Docker нет X server для GUI
+  const effectiveHeadless = isDocker ? true : headless;
+
+  if (isDocker && !headless) {
+    console.warn(
+      '[BrowserHelper] Docker environment detected: forcing headless mode (GUI not available in Docker)',
+    );
+  }
+
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-crashpad-for-testing',
     '--disable-crash-reporter',
     '--disable-breakpad',
+    // Флаги для Docker окружения (headless режим без X server)
+    ...(isDocker
+      ? [
+          '--disable-gpu',
+          '--disable-dev-shm-usage',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--disable-background-networking',
+          // НЕ используем --single-process и --no-zygote, так как они могут вызывать проблемы с Target.createTarget
+        ]
+      : []),
     ...additionalArgs,
   ];
 
   // В Docker используем обычный headless режим вместо 'new', так как 'new' может вызывать проблемы
   // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
-  const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
   const options: Parameters<typeof puppeteer.launch>[0] = {
-    // В Docker используем true вместо 'new' для избежания проблем с Target.createTarget timed out
-    headless: headless ? (isDocker ? true : ('new' as any)) : false,
+    // В Docker всегда используем true для headless режима
+    headless: effectiveHeadless ? (isDocker ? true : ('new' as any)) : false,
     defaultViewport: null,
     args,
     // Увеличиваем таймаут протокола для Docker (системный Chromium работает медленнее)
     // Согласно https://github.com/puppeteer/puppeteer/issues/10144 даже 240000 может быть недостаточно
     protocolTimeout: isDocker ? 300000 : 120000, // 5 минут в Docker, 2 минуты локально
+    // Дополнительные опции для стабильности в Docker
+    ignoreHTTPSErrors: true,
+    // Не игнорируем аргументы по умолчанию, но можем добавить свои
+    // Устанавливаем переменные окружения для подавления X server в Docker
+    env: {
+      ...process.env,
+      ...(isDocker
+        ? {
+            DISPLAY: '',
+            DBUS_SESSION_BUS_ADDRESS: '',
+            WAYLAND_DISPLAY: '',
+            XDG_RUNTIME_DIR: '',
+            XDG_SESSION_TYPE: 'tty',
+            TMPDIR: '/tmp',
+            TEMP: '/tmp',
+            TMP: '/tmp',
+            HOME: process.env.HOME || '/tmp',
+            XDG_CACHE_HOME: '/tmp/.cache',
+            XDG_CONFIG_HOME: '/tmp/.config',
+          }
+        : {}),
+    },
   };
 
   // Используем системный Chromium, если указан в переменной окружения (для Docker)
@@ -241,6 +289,10 @@ export async function createBrowser(
     `[BrowserHelper] Using User-Agent: ${userAgent.substring(0, 50)}...`,
   );
 
+  const isDocker =
+    !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+    process.env.NODE_ENV === 'production';
+
   const args: string[] = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -250,10 +302,6 @@ export async function createBrowser(
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
     '--no-first-run',
-    // Убираем --no-zygote, так как он может вызывать проблемы с Target.createTarget timed out
-    // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
-    // и https://github.com/puppeteer/puppeteer/issues/10144
-    // '--no-zygote',
     '--disable-gpu', // Критически важно для Docker - без этого Target.createTarget может таймаутить
     '--start-maximized',
     `--user-agent=${userAgent}`,
@@ -273,6 +321,15 @@ export async function createBrowser(
     '--disable-renderer-backgrounding',
     '--disable-features=TranslateUI',
     '--disable-ipc-flooding-protection',
+    // Дополнительные флаги для Docker (headless режим без X server)
+    // ВАЖНО: --single-process и --no-zygote могут вызывать проблемы с Target.createTarget
+    // Используем только если действительно необходимо
+    ...(isDocker
+      ? [
+          // '--single-process', // Может вызывать проблемы с Target.createTarget
+          // '--no-zygote', // Может вызывать проблемы с Target.createTarget
+        ]
+      : []),
   ];
 
   // Настройка прокси
@@ -298,10 +355,12 @@ export async function createBrowser(
   // Тип опций запуска совместим с обоими puppeteer и puppeteer-extra
   // В Docker используем обычный headless режим вместо 'new', так как 'new' может вызывать проблемы
   // Согласно https://stackoverflow.com/questions/76207925/target-createtarget-timed-out-increase-the-protocoltimeout
-  const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
   const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
-    // В Docker используем true вместо 'new' для избежания проблем с Target.createTarget timed out
-    headless: headless ? (isDocker ? true : ('new' as any)) : false,
+    // В Docker всегда используем true для headless режима (без GUI)
+    // Используем 'new' headless только вне Docker для избежания предупреждений
+    headless: isDocker ? true : headless ? ('new' as any) : false,
+    // Дополнительные опции для стабильности в Docker
+    ignoreHTTPSErrors: true,
     defaultViewport: null,
     args,
     // Увеличиваем таймаут протокола для Docker (системный Chromium работает медленнее)
@@ -316,6 +375,19 @@ export async function createBrowser(
       HOME: process.env.HOME || '/tmp',
       XDG_CACHE_HOME: '/tmp/.cache',
       XDG_CONFIG_HOME: '/tmp/.config',
+      // Отключаем X server для Docker
+      DISPLAY: isDocker ? '' : process.env.DISPLAY || '',
+      DBUS_SESSION_BUS_ADDRESS: isDocker
+        ? ''
+        : process.env.DBUS_SESSION_BUS_ADDRESS || '',
+      // Дополнительные переменные для отключения GUI в Docker
+      ...(isDocker
+        ? {
+            WAYLAND_DISPLAY: '',
+            XDG_RUNTIME_DIR: '',
+            XDG_SESSION_TYPE: 'tty',
+          }
+        : {}),
     },
   };
 
@@ -328,9 +400,15 @@ export async function createBrowser(
 
   // Используем обычный puppeteer, если stealth plugin отключен
   // Это помогает избежать проблем с "Requesting main frame too early!" в puppeteer-extra
-  const browser = USE_STEALTH_PLUGIN
-    ? await PuppeteerExtra.launch(launchOptions)
-    : await puppeteer.launch(launchOptions);
+  let browser: Browser;
+  try {
+    browser = USE_STEALTH_PLUGIN
+      ? await PuppeteerExtra.launch(launchOptions)
+      : await puppeteer.launch(launchOptions);
+  } catch (error) {
+    console.error('[BrowserHelper] Failed to launch browser:', error);
+    throw error;
+  }
 
   // В Docker даем браузеру время на полную инициализацию перед созданием страниц
   // Это критически важно для избежания "Target.createTarget timed out"
@@ -339,7 +417,23 @@ export async function createBrowser(
     console.log(
       '[BrowserHelper] Waiting for browser to fully initialize in Docker...',
     );
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 5000)); // Увеличено до 5 секунд
+
+    // Проверяем, что браузер все еще подключен
+    if (!browser.isConnected()) {
+      throw new Error('Browser disconnected immediately after launch');
+    }
+
+    // Пробуем получить список страниц для проверки работоспособности
+    try {
+      const pages = await browser.pages();
+      console.log(
+        `[BrowserHelper] Browser initialized, ${pages.length} page(s) available`,
+      );
+    } catch (error) {
+      console.warn('[BrowserHelper] Warning: Could not get pages list:', error);
+      // Не выбрасываем ошибку, так как это может быть нормально
+    }
   }
 
   // Если прокси требует аутентификацию, настраиваем её
@@ -392,11 +486,15 @@ export async function createPage(
       | undefined;
     if (!incognitoContext) {
       try {
+        const isDocker =
+          !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+          process.env.NODE_ENV === 'production';
         incognitoContext = await browser.createIncognitoBrowserContext();
         (browser as any)._incognitoContext = incognitoContext;
         console.log('[BrowserHelper] Created incognito browser context');
         // Задержка после создания контекста для инициализации (увеличена для Docker)
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const contextDelay = isDocker ? 2000 : 500;
+        await new Promise((resolve) => setTimeout(resolve, contextDelay));
       } catch (error) {
         console.warn(
           '[BrowserHelper] Failed to create incognito context, using default context:',
@@ -415,10 +513,24 @@ export async function createPage(
     if (!incognitoContext) {
       throw new Error('Failed to create incognito browser context');
     }
+    const isDocker =
+      !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+      process.env.NODE_ENV === 'production';
     let retries = 3;
     while (retries > 0) {
       try {
+        // Дополнительная задержка перед созданием страницы в Docker
+        if (isDocker && retries < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
         page = await incognitoContext.newPage();
+
+        // Проверяем, что страница создана успешно
+        if (page.isClosed()) {
+          throw new Error('Page closed immediately after creation');
+        }
+
         console.log('[BrowserHelper] Created page in incognito context');
         break;
       } catch (error) {
@@ -430,7 +542,6 @@ export async function createPage(
           errorMessage.includes('Target closed')
         ) {
           if (retries > 0) {
-            const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
             console.warn(
               `[BrowserHelper] Failed to create page in incognito context (${retries} retries left), waiting ${retryDelay}ms:`,
@@ -451,10 +562,24 @@ export async function createPage(
     }
   } else {
     // Создаем обычную страницу с retry логикой
+    const isDocker =
+      !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+      process.env.NODE_ENV === 'production';
     let retries = 3;
     while (retries > 0) {
       try {
+        // Дополнительная задержка перед созданием страницы в Docker
+        if (isDocker && retries < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+
         page = await browser.newPage();
+
+        // Проверяем, что страница создана успешно
+        if (page.isClosed()) {
+          throw new Error('Page closed immediately after creation');
+        }
+
         break;
       } catch (error) {
         const errorMessage = (error as Error).message || String(error);
@@ -465,7 +590,6 @@ export async function createPage(
           errorMessage.includes('Target closed')
         ) {
           if (retries > 0) {
-            const isDocker = !!process.env.PUPPETEER_EXECUTABLE_PATH;
             const retryDelay = isDocker ? 5000 : 2000; // Больше задержка в Docker
             console.warn(
               `[BrowserHelper] Failed to create page (${retries} retries left), waiting ${retryDelay}ms:`,

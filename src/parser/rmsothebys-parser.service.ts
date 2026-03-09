@@ -1,27 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import PuppeteerExtra from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import type { Browser } from 'puppeteer';
+import type { Browser, Page } from 'puppeteer';
 import { Car, CarDocument } from '../schemas/car.schema';
-import { getBaseLaunchOptions } from './utils/browser-helper';
-
-// Используем stealth plugin только если он включен через переменную окружения
-const USE_STEALTH_PLUGIN = process.env.USE_STEALTH_PLUGIN === 'true';
-if (USE_STEALTH_PLUGIN) {
-  try {
-    PuppeteerExtra.use(StealthPlugin());
-  } catch (error) {
-    console.warn(
-      '[RMSothebysParser] Failed to enable stealth plugin:',
-      (error as Error).message,
-    );
-  }
-}
-
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91 Safari/537.36';
+import { BaseParserService } from './utils/base-parser.service';
+import { DEFAULT_HEADLESS } from './utils/browser-helper';
+import { BrowserPool } from './utils/browser-pool.service';
 
 // Список брендов для распознавания (отсортированы по длине для правильного совпадения)
 const POTENTIAL_BRANDS = [
@@ -123,10 +107,10 @@ interface ParseAllLinksResult {
 }
 
 @Injectable()
-export class RmsothebysParserService {
-  private readonly logger = new Logger(RmsothebysParserService.name);
-
-  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {}
+export class RmsothebysParserService extends BaseParserService {
+  constructor(@InjectModel(Car.name) private carModel: Model<CarDocument>) {
+    super(RmsothebysParserService.name);
+  }
 
   /**
    * Парсит все ссылки со страницы поиска RM Sotheby's
@@ -145,18 +129,14 @@ export class RmsothebysParserService {
       errorsList: [],
     };
 
-    let browser: Browser | undefined = undefined;
+    let browser: Browser | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(getBaseLaunchOptions(false, []));
-
-      const incognitoContext = await browser.createIncognitoBrowserContext();
-      const page = await incognitoContext.newPage();
-      await page.setUserAgent(USER_AGENT);
-
-      await page.setExtraHTTPHeaders({
-        'accept-language': 'en-US,en;q=0.9',
-      });
+      const { browser: browserInstance, page } = await this.setupBrowserAndPage(
+        DEFAULT_HEADLESS,
+        [],
+      );
+      browser = browserInstance;
 
       this.logger.log('Открываем страницу поиска...');
       await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 0 });
@@ -179,8 +159,8 @@ export class RmsothebysParserService {
           timeout: 30000,
         });
 
-        // Небольшая задержка для полной загрузки динамического контента
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Небольшая задержка для полной загрузки динамического контента (уменьшена с 2 до 1 секунды)
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Извлекаем все ссылки на страницы автомобилей с текущей страницы
         const pageLinks = (await page.evaluate(() => {
@@ -261,8 +241,8 @@ export class RmsothebysParserService {
             });
 
             if (nextButtonClicked) {
-              // Ждем загрузки следующей страницы
-              await new Promise((resolve) => setTimeout(resolve, 3000));
+              // Ждем загрузки следующей страницы (уменьшена задержка с 3 до 2 секунд)
+              await new Promise((resolve) => setTimeout(resolve, 2000));
               currentPage++;
             } else {
               hasMorePages = false;
@@ -286,7 +266,7 @@ export class RmsothebysParserService {
         `Всего найдено ссылок на ${currentPage} страницах: ${result.total}`,
       );
 
-      await browser.close();
+      await this.closeBrowser(browser);
     } catch (error) {
       result.errors++;
       result.errorsList.push({
@@ -296,9 +276,7 @@ export class RmsothebysParserService {
       this.logger.error(
         `Ошибка при парсинге ссылок: ${(error as Error).message}`,
       );
-      if (browser) {
-        await browser.close();
-      }
+      await this.closeBrowser(browser);
     }
 
     return result;
@@ -308,7 +286,7 @@ export class RmsothebysParserService {
    * Парсит данные автомобиля со страницы (общая логика)
    */
   private async parseCarFromPage(
-    page: any,
+    page: Page,
     url: string,
   ): Promise<Partial<Car>> {
     // Ждем загрузки основных элементов
@@ -349,25 +327,21 @@ export class RmsothebysParserService {
   }
 
   /**
-   * Парсит и сохраняет автомобиль из RM Sotheby's
+   * Парсит и сохраняет автомобиль из RM Sotheby's (версия с переиспользованием браузера)
    */
-  async parseAndSave(url: string): Promise<Car> {
+  async parseAndSaveWithPool(
+    url: string,
+    browserPool: BrowserPool,
+  ): Promise<Car> {
     if (!url.includes('rmsothebys.com')) {
       throw new Error('URL должен быть с домена rmsothebys.com');
     }
 
-    let browser: Browser | undefined = undefined;
+    let page: Page | undefined;
 
     try {
-      browser = await PuppeteerExtra.launch(getBaseLaunchOptions(false, []));
-
-      const incognitoContext = await browser.createIncognitoBrowserContext();
-      const page = await incognitoContext.newPage();
-      await page.setUserAgent(USER_AGENT);
-
-      await page.setExtraHTTPHeaders({
-        'accept-language': 'en-US,en;q=0.9',
-      });
+      // Получаем страницу из пула браузеров
+      page = await browserPool.getPage();
 
       this.logger.log(`Парсинг автомобиля с URL: ${url}`);
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 0 });
@@ -381,21 +355,63 @@ export class RmsothebysParserService {
         new: true,
       });
 
-      await browser.close();
+      if (page) {
+        await browserPool.releasePage(page);
+      }
       return car;
     } catch (error) {
       this.logger.error(`Ошибка при парсинге: ${(error as Error).message}`);
-      if (browser) {
-        await browser.close();
+      if (page) {
+        await browserPool.releasePage(page);
       }
       throw error;
     }
   }
 
   /**
+   * Парсит и сохраняет автомобиль из RM Sotheby's (оригинальная версия)
+   */
+  async parseAndSave(url: string): Promise<Car> {
+    if (!url.includes('rmsothebys.com')) {
+      throw new Error('URL должен быть с домена rmsothebys.com');
+    }
+
+    let browser: Browser | undefined;
+
+    try {
+      const { browser: browserInstance, page } = await this.setupBrowserAndPage(
+        DEFAULT_HEADLESS,
+        [],
+      );
+      browser = browserInstance;
+
+      this.logger.log(`Парсинг автомобиля с URL: ${url}`);
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 0 });
+
+      // Используем общую логику парсинга
+      const carDataToSave = await this.parseCarFromPage(page, url);
+
+      // Сохраняем или обновляем в базе данных
+      const car = await this.carModel.findOneAndUpdate({ url }, carDataToSave, {
+        upsert: true,
+        new: true,
+      });
+
+      return car;
+    } catch (error) {
+      this.logger.error(`Ошибка при парсинге: ${(error as Error).message}`);
+      throw error;
+    } finally {
+      if (browser) {
+        await this.closeBrowser(browser);
+      }
+    }
+  }
+
+  /**
    * Извлекает заголовок
    */
-  private async extractTitle(page: any): Promise<string> {
+  private async extractTitle(page: Page): Promise<string> {
     return await page.evaluate(() => {
       const h1 = document.querySelector('h1');
       return h1?.textContent?.trim() || document.title || '';
@@ -406,7 +422,7 @@ export class RmsothebysParserService {
    * Определяет тип листинга: auction или listing (Private Sales)
    */
   private async determineListingType(
-    page: any,
+    page: Page,
     url: string,
   ): Promise<'auction' | 'listing'> {
     return await page.evaluate((pageUrl: string) => {
@@ -468,7 +484,7 @@ export class RmsothebysParserService {
    * Извлекает цены (price и startingPrice)
    */
   private async extractPrices(
-    page: any,
+    page: Page,
     listingType: 'auction' | 'listing',
   ): Promise<{
     price?: { USD?: number; EUR?: number; RUB?: number; GBP?: number };
@@ -750,7 +766,7 @@ export class RmsothebysParserService {
   /**
    * Извлекает изображения в высоком разрешении
    */
-  private async extractImages(page: any): Promise<string[]> {
+  private async extractImages(page: Page): Promise<string[]> {
     return await page.evaluate(async () => {
       const images: string[] = [];
       const processedSrcs = new Set<string>();
@@ -871,7 +887,9 @@ export class RmsothebysParserService {
         }
       } catch (error) {
         // Если не удалось открыть карусель, продолжаем
-        console.log('Could not open carousel:', error);
+        this.logger.debug(
+          `Could not open carousel: ${(error as Error).message}`,
+        );
       }
 
       // Финальная фильтрация: удаляем placeholder изображения и дубликаты
@@ -889,7 +907,7 @@ export class RmsothebysParserService {
   /**
    * Извлекает описание с сохранением абзацев (через innerText или сбор по блокам p/div)
    */
-  private async extractDescription(page: any): Promise<string> {
+  private async extractDescription(page: Page): Promise<string> {
     return await page.evaluate(() => {
       const descriptionSelectors = [
         '[class*="description"]',
@@ -935,7 +953,7 @@ export class RmsothebysParserService {
   /**
    * Извлекает локацию
    */
-  private async extractLocation(page: any): Promise<{
+  private async extractLocation(page: Page): Promise<{
     city?: string;
     country?: string;
   }> {
@@ -1083,7 +1101,7 @@ export class RmsothebysParserService {
   /**
    * Извлекает данные автомобиля (бренд, модель, год и т.д.)
    */
-  private async extractCarData(page: any): Promise<{
+  private async extractCarData(page: Page): Promise<{
     brand?: string;
     model?: string;
     year?: number;
@@ -1091,7 +1109,7 @@ export class RmsothebysParserService {
     transmission?: string;
     engineVolume?: number;
   }> {
-    return await page.evaluate((potentialBrands: string[]) => {
+    return await page.evaluate((potentialBrands: readonly string[]) => {
       const data: {
         brand?: string;
         model?: string;

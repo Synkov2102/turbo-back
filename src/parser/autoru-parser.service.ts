@@ -39,13 +39,43 @@ export class AutoRuParserService {
     let browser: Browser | undefined;
 
     try {
+      // Определяем, работаем ли мы в Docker окружении
+      const isDocker =
+        !!process.env.PUPPETEER_EXECUTABLE_PATH ||
+        process.env.NODE_ENV === 'production';
+
+      // В Docker всегда используется headless режим (автоматически в getBaseLaunchOptions)
+      // Локально можно использовать false для решения капчи вручную
+      const useHeadless =
+        process.env.NODE_ENV === 'production' ? DEFAULT_HEADLESS : false;
       browser = await PuppeteerExtra.launch(
-        getBaseLaunchOptions(false, []), // Переопределяем DEFAULT_HEADLESS на false для решения капчи вручную
+        getBaseLaunchOptions(useHeadless, []),
       );
 
-      // Создаем страницу в инкогнито контексте
+      // В Docker даем браузеру время на инициализацию
+      if (isDocker) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        if (!browser.isConnected()) {
+          throw new Error('Browser disconnected after launch');
+        }
+      }
+
+      // Создаем страницу в инкогнито контексте с задержкой для Docker
+      if (isDocker) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
       const incognitoContext = await browser.createIncognitoBrowserContext();
+
+      if (isDocker) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
       const page = await incognitoContext.newPage();
+
+      if (page.isClosed()) {
+        throw new Error('Page closed immediately after creation');
+      }
       await page.setUserAgent(USER_AGENT);
 
       // немного человечных заголовков

@@ -15,10 +15,7 @@ import { FilterOptions } from './interfaces/filter-options.interface';
 import { PaginatedResponse } from './interfaces/paginated-response.interface';
 import { PaginatedResponseDto } from './dto/paginated-response.dto';
 import { FilterOptionsDto } from './dto/filter-options.dto';
-import {
-  BrandStatsResponseDto,
-  BrandStatDto,
-} from './dto/brand-stats.dto';
+import { BrandStatsResponseDto, BrandStatDto } from './dto/brand-stats.dto';
 
 @ApiTags('cars')
 @Controller('cars')
