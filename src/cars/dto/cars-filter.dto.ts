@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsNumber, Min, Max, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -79,6 +79,18 @@ export class CarsFilterDto {
   @IsOptional()
   @IsString()
   priceCurrency?: 'RUB' | 'USD' | 'EUR';
+
+  @ApiProperty({
+    description: 'Сортировка результатов',
+    required: false,
+    default: 'priceAsc',
+    enum: ['priceAsc', 'priceDesc', 'yearAsc', 'yearDesc'],
+    example: 'priceAsc',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['priceAsc', 'priceDesc', 'yearAsc', 'yearDesc'])
+  sort?: 'priceAsc' | 'priceDesc' | 'yearAsc' | 'yearDesc';
 
   @ApiProperty({ description: 'Город', example: 'Москва', required: false })
   @IsOptional()

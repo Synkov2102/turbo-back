@@ -278,6 +278,58 @@
         ]
       }
     },
+    "/parser/hoogselections/parse": {
+      "post": {
+        "description": "Парсит одну ссылку вида https://hoogselections.nl/product/... и сохраняет/обновляет запись в базе данных",
+        "operationId": "ParserController_parseHoogSelectionsAd",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseAvitoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Объявление успешно распарсено и сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Car"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный URL"
+          }
+        },
+        "summary": "Распарсить конкретное объявление с HooG Selections (product) и сохранить в базу данных",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
+    "/parser/hoogselections/parse-all": {
+      "post": {
+        "description": "Парсит актуальные объявления с HooG Selections (In showroom): обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.",
+        "operationId": "ParserController_parseAllHoogSelections",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Парсинг завершен"
+          }
+        },
+        "summary": "Парсинг HooG Selections (In showroom)",
+        "tags": [
+          "parser"
+        ]
+      }
+    },
     "/parser/rmsothebys/parse-all": {
       "post": {
         "description": "Парсит актуальные объявления с RM Sotheby's: обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.",
@@ -578,6 +630,23 @@
                 "RUB",
                 "USD",
                 "EUR"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Сортировка результатов",
+            "schema": {
+              "default": "priceAsc",
+              "example": "priceAsc",
+              "type": "string",
+              "enum": [
+                "priceAsc",
+                "priceDesc",
+                "yearAsc",
+                "yearDesc"
               ]
             }
           },

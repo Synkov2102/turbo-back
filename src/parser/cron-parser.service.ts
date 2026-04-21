@@ -7,9 +7,11 @@ import { Car, CarDocument } from '../schemas/car.schema';
 import {
   CRON_VK_GROUPS,
   CRON_FULL_PARSE_CYCLE,
+  CRON_HOOGSELECTIONS,
 } from '../constants/cron.constants';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
+import { HoogSelectionsParserService } from './hoogselections-parser.service';
 import { VkParserService } from './vk-parser.service';
 import { CarsService } from '../cars/cars.service';
 import { StatusCheckerService } from './status-checker.service';
@@ -26,12 +28,12 @@ export class CronParserService {
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
     private readonly oldtimerfarmParser: OldtimerfarmParserService,
     private readonly rmsothebysParser: RmsothebysParserService,
+    private readonly hoogSelectionsParser: HoogSelectionsParserService,
     private readonly vkParserService: VkParserService,
     private readonly carsService: CarsService,
     private readonly statusCheckerService: StatusCheckerService,
     private readonly configService: ConfigService,
   ) {}
-
 
   /**
    * Cron job для парсинга постов из групп ВКонтакте
@@ -65,6 +67,110 @@ export class CronParserService {
       this.logger.error(
         `Ошибка при выполнении полного цикла парсинга: ${(error as Error).message}`,
       );
+    }
+  }
+
+  /**
+   * Cron job для парсинга HooG Selections (In showroom)
+   */
+  @Cron(CRON_HOOGSELECTIONS)
+  async parseHoogSelectionsCron() {
+    if (this.isRunning) {
+      this.logger.warn('Парсинг уже выполняется, пропускаем запуск cron job');
+      return;
+    }
+
+    this.logger.log(
+      'Запуск cron job для парсинга HooG Selections (In showroom)',
+    );
+    try {
+      await this.parseHoogSelections();
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при парсинге HooG Selections: ${(error as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Парсинг HooG Selections: парсит актуальные объявления,
+   * обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.
+   */
+  async parseHoogSelections(): Promise<void> {
+    if (this.isRunning) {
+      this.logger.warn('Парсинг HooG Selections уже выполняется');
+      return;
+    }
+
+    this.isRunning = true;
+    const startTime = Date.now();
+    const listUrl = 'https://hoogselections.nl/in-showroom/';
+
+    try {
+      this.logger.log('Начало парсинга HooG Selections (In showroom)');
+
+      const existingUrls = await this.carModel
+        .find({
+          url: { $regex: /hoogselections\.nl\/product\//i },
+        })
+        .select('url')
+        .lean()
+        .exec();
+      const existingUrlsSet = new Set(
+        existingUrls.map((car) => car.url.toLowerCase()),
+      );
+
+      const parseResult =
+        await this.hoogSelectionsParser.parseAllCarsFromList(listUrl);
+
+      this.logger.log(
+        `Парсинг завершен: ${parseResult.parsed} обработано, ${parseResult.skipped} пропущено, ${parseResult.errors} ошибок`,
+      );
+
+      const parsedUrls = new Set<string>();
+      for (const car of parseResult.cars) {
+        if (car.url) parsedUrls.add(car.url.toLowerCase());
+      }
+
+      const missingUrls: string[] = [];
+      for (const url of existingUrlsSet) {
+        if (!parsedUrls.has(url.toLowerCase())) {
+          missingUrls.push(url);
+        }
+      }
+
+      if (missingUrls.length > 0) {
+        const hoogUrls = missingUrls.filter((u) =>
+          /hoogselections\.nl\/product\//i.test(u),
+        );
+        if (hoogUrls.length > 0) {
+          const updateResult = await this.carModel
+            .updateMany(
+              { url: { $in: hoogUrls } },
+              {
+                $set: {
+                  status: 'removed',
+                  lastChecked: new Date(),
+                },
+              },
+            )
+            .exec();
+
+          this.logger.log(
+            `Помечено как removed: ${updateResult.modifiedCount} авто с HooG Selections`,
+          );
+        }
+      }
+
+      const duration = Math.round((Date.now() - startTime) / 1000);
+      this.logger.log(`Парсинг HooG Selections завершен за ${duration} секунд`);
+    } catch (error) {
+      this.logger.error(
+        `Ошибка при парсинге HooG Selections: ${(error as Error).message}`,
+      );
+      throw error;
+    } finally {
+      this.isRunning = false;
     }
   }
 

@@ -15,6 +15,7 @@ interface CarFilters {
   minPrice?: number;
   maxPrice?: number;
   priceCurrency?: 'RUB' | 'USD' | 'EUR';
+  sort?: 'priceAsc' | 'priceDesc' | 'yearAsc' | 'yearDesc';
   city?: string;
   country?: string;
   transmission?: string;
@@ -107,12 +108,31 @@ export class CarsService {
       query.engineVolume = engineVolumeFilter;
     }
 
+    const currency = filters.priceCurrency || 'RUB';
+    const priceField = `price.${currency}`;
+
+    const sort = (() => {
+      const requested = filters.sort || 'priceAsc';
+
+      switch (requested) {
+        case 'yearAsc':
+          return { year: 1, createdAt: -1 } as const;
+        case 'yearDesc':
+          return { year: -1, createdAt: -1 } as const;
+        case 'priceDesc':
+          return { [priceField]: -1, createdAt: -1 } as const;
+        case 'priceAsc':
+        default:
+          return { [priceField]: 1, createdAt: -1 } as const;
+      }
+    })();
+
     // Получаем данные и общее количество параллельно
     const carsQuery = this.carModel
       .find(query)
       .skip(skip)
       .limit(limit)
-      .sort({ createdAt: -1 }); // Сортировка по дате создания (новые сначала)
+      .sort(sort);
     const totalQuery = this.getTotalCount(query);
     const cars = await carsQuery.exec();
     const total = await totalQuery;

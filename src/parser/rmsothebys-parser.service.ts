@@ -163,7 +163,7 @@ export class RmsothebysParserService extends BaseParserService {
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Извлекаем все ссылки на страницы автомобилей с текущей страницы
-        const pageLinks = (await page.evaluate(() => {
+        const pageLinks = await page.evaluate(() => {
           const carLinks = new Set<string>();
           const anchors = document.querySelectorAll<HTMLAnchorElement>(
             'a[href*="/auctions/"], a[href*="/ps00/"]',
@@ -187,7 +187,7 @@ export class RmsothebysParserService extends BaseParserService {
           });
 
           return Array.from(carLinks);
-        })) as string[];
+        });
 
         // Добавляем ссылки с текущей страницы
         pageLinks.forEach((link: string) => allLinks.add(link));

@@ -47,9 +47,7 @@ export class BrowserPool extends BaseParserService {
     customHeaders?: Record<string, string>,
   ): Promise<Page> {
     if (!this.isInitialized || !this.browser || !this.context) {
-      throw new Error(
-        'Browser pool not initialized. Call initialize() first.',
-      );
+      throw new Error('Browser pool not initialized. Call initialize() first.');
     }
 
     // Если создано слишком много страниц, перезапускаем браузер
@@ -89,9 +87,7 @@ export class BrowserPool extends BaseParserService {
         await page.close();
       }
     } catch (error) {
-      this.logger.warn(
-        `Error closing page: ${(error as Error).message}`,
-      );
+      this.logger.warn(`Error closing page: ${(error as Error).message}`);
     }
   }
 
@@ -103,9 +99,7 @@ export class BrowserPool extends BaseParserService {
       try {
         await this.closeContext(this.context);
       } catch (error) {
-        this.logger.warn(
-          `Error closing context: ${(error as Error).message}`,
-        );
+        this.logger.warn(`Error closing context: ${(error as Error).message}`);
       }
       this.context = null;
     }

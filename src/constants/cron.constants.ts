@@ -10,6 +10,9 @@ export const CRON_OLDTIMERFARM = '0 0 4 * * *';
 /** Парсинг RMSothebys — каждый день в 3:00 */
 export const CRON_RMSOTHEBYS = '0 0 3 * * *';
 
+/** Парсинг HooG Selections (In showroom) — каждый день в 2:30 */
+export const CRON_HOOGSELECTIONS = '0 30 2 * * *';
+
 /** Обновление цен в рублях — каждый день в 5:00 */
 export const CRON_UPDATE_PRICES_RUB = '0 0 5 * * *';
 

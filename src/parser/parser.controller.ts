@@ -19,6 +19,7 @@ import { AvitoParserService } from './avito-parser.service';
 import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
+import { HoogSelectionsParserService } from './hoogselections-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 import { CronParserService } from './cron-parser.service';
 import { VkParserService } from './vk-parser.service';
@@ -36,6 +37,7 @@ export class ParserController {
     private readonly autoruParserService: AutoRuParserService,
     private readonly oldtimerfarmParserService: OldtimerfarmParserService,
     private readonly rmsothebysParserService: RmsothebysParserService,
+    private readonly hoogSelectionsParserService: HoogSelectionsParserService,
     private readonly statusCheckerService: StatusCheckerService,
     private readonly cronParserService: CronParserService,
     private readonly vkParserService: VkParserService,
@@ -219,6 +221,42 @@ export class ParserController {
   })
   async parseRmsothebysAdOld(@Body() dto: ParseAvitoDto): Promise<Car> {
     return this.rmsothebysParserService.parseAndSave(dto.url);
+  }
+
+  @Post('hoogselections/parse')
+  @ApiOperation({
+    summary:
+      'Распарсить конкретное объявление с HooG Selections (product) и сохранить в базу данных',
+    description:
+      'Парсит одну ссылку вида https://hoogselections.nl/product/... и сохраняет/обновляет запись в базе данных',
+  })
+  @ApiBody({ type: ParseAvitoDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Объявление успешно распарсено и сохранено',
+    type: Car,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Неверный URL',
+  })
+  async parseHoogSelectionsAd(@Body() dto: ParseAvitoDto): Promise<Car> {
+    return this.hoogSelectionsParserService.parseAndSave(dto.url);
+  }
+
+  @Post('hoogselections/parse-all')
+  @ApiOperation({
+    summary: 'Парсинг HooG Selections (In showroom)',
+    description:
+      'Парсит актуальные объявления с HooG Selections (In showroom): обновляет существующие, добавляет новые, помечает отсутствующие в новом парсе как removed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Парсинг завершен',
+  })
+  async parseAllHoogSelections(): Promise<{ message: string }> {
+    await this.cronParserService.parseHoogSelections();
+    return { message: 'Парсинг HooG Selections завершен' };
   }
 
   @Post('rmsothebys/parse-all')

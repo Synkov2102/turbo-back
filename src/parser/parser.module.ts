@@ -8,6 +8,7 @@ import { Post, PostSchema } from '../schemas/post.schema';
 import { AutoRuParserService } from './autoru-parser.service';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
+import { HoogSelectionsParserService } from './hoogselections-parser.service';
 import { StatusCheckerService } from './status-checker.service';
 import { CronParserService } from './cron-parser.service';
 import { VkParserService } from './vk-parser.service';
@@ -30,6 +31,7 @@ import { CarsModule } from '../cars/cars.module';
     AutoRuParserService,
     OldtimerfarmParserService,
     RmsothebysParserService,
+    HoogSelectionsParserService,
     StatusCheckerService,
     CronParserService,
     VkParserService,

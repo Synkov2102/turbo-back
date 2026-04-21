@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -252,8 +249,8 @@ export class AutoRuParserService {
 
       // ---------- подготавливаем данные ----------
 
-      let brand = saleData?.markName || '';
-      let model = saleData?.modelName || '';
+      const brand = saleData?.markName || '';
+      const model = saleData?.modelName || '';
       const year = saleData?.year ? Number(saleData.year) : 0;
       const priceValue = saleData?.price ? Number(saleData.price) : 0;
       const mileage = saleData?.['km-age'] ? Number(saleData['km-age']) : 0;
