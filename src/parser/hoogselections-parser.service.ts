@@ -130,6 +130,14 @@ export class HoogSelectionsParserService extends BaseParserService {
         .map((s) => s.textContent || '')
         .filter(Boolean);
 
+      const safeJsonParse = (raw: string): unknown | null => {
+        try {
+          return JSON.parse(raw) as unknown;
+        } catch {
+          return null;
+        }
+      };
+
       const getAvailabilityFromJson = (
         value: unknown,
       ): 'InStock' | 'OutOfStock' | null => {
@@ -159,16 +167,48 @@ export class HoogSelectionsParserService extends BaseParserService {
       };
 
       let availability: 'InStock' | 'OutOfStock' | null = null;
+      let jsonLdBrand = '';
+      let jsonLdName = '';
       for (const raw of ldJsonScripts) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          const a = getAvailabilityFromJson(parsed);
-          if (a) {
-            availability = a;
-            break;
+        const parsed = safeJsonParse(raw);
+        if (!parsed) continue;
+
+        const a = getAvailabilityFromJson(parsed);
+        if (a && !availability) availability = a;
+
+        // try to pick Product.name / Product.brand.name if present
+        const pickProduct = (v: unknown): Record<string, unknown> | null => {
+          if (!v) return null;
+          if (Array.isArray(v)) {
+            for (const item of v) {
+              const p = pickProduct(item);
+              if (p) return p;
+            }
+            return null;
           }
-        } catch {
-          // ignore invalid JSON-LD blocks
+          if (typeof v !== 'object') return null;
+          const obj = v as Record<string, unknown>;
+          const t = obj['@type'];
+          const types = Array.isArray(t) ? t : t ? [t] : [];
+          if (types.some((x) => String(x).toLowerCase() === 'product')) return obj;
+          // some pages use @graph
+          if (obj['@graph']) return pickProduct(obj['@graph']);
+          return null;
+        };
+
+        const product = pickProduct(parsed);
+        if (product) {
+          if (!jsonLdName && typeof product.name === 'string') {
+            jsonLdName = product.name.trim();
+          }
+          if (!jsonLdBrand) {
+            const b = product.brand;
+            if (typeof b === 'string') jsonLdBrand = b.trim();
+            else if (b && typeof b === 'object') {
+              const bn = (b as Record<string, unknown>).name;
+              if (typeof bn === 'string') jsonLdBrand = bn.trim();
+            }
+          }
         }
       }
 
@@ -205,6 +245,11 @@ export class HoogSelectionsParserService extends BaseParserService {
         'datum eerste toelating',
         'transmissie',
         'brandstof',
+        // variants that occasionally appear on NL car pages / wp templates
+        'bouwjaar',
+        'jaar',
+        'year',
+        'first registration',
       ];
 
       for (let i = 0; i < allText.length - 1; i++) {
@@ -325,6 +370,8 @@ export class HoogSelectionsParserService extends BaseParserService {
       const rawDate = specs['datum eerste toelating'] || '';
       const rawBrand = specs['merk'] || '';
       const rawModel = specs['model'] || '';
+      const rawYear =
+        specs['bouwjaar'] || specs['jaar'] || specs['year'] || '';
       const rawTransmission = specs['transmissie'] || '';
 
       return {
@@ -334,16 +381,55 @@ export class HoogSelectionsParserService extends BaseParserService {
         rawModel,
         rawKm,
         rawDate,
+        rawYear,
         rawTransmission,
         joinedPrices,
         images,
         description,
         isSold,
+        jsonLdBrand,
+        jsonLdName,
       };
     }, url);
 
-    const brand = extracted.rawBrand || '';
-    const model = extracted.rawModel || '';
+    const normalizeSpaces = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+
+    const titleNorm = normalizeSpaces(extracted.title || '');
+    const jsonLdNameNorm = normalizeSpaces(extracted.jsonLdName || '');
+
+    const brand = (() => {
+      const candidate = normalizeSpaces(extracted.rawBrand || '') ||
+        normalizeSpaces(extracted.jsonLdBrand || '');
+      if (candidate) return candidate;
+
+      // fallback: infer first token-ish from title (best-effort)
+      const t = titleNorm || jsonLdNameNorm;
+      if (!t) return '';
+      // take up to first 2 words before a digit year/trim
+      const m =
+        t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:[ -][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)?)(?=\s)/) ||
+        t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+)$/);
+      return m ? m[1].trim() : '';
+    })();
+
+    const model = (() => {
+      const candidate = normalizeSpaces(extracted.rawModel || '');
+      if (candidate) return candidate;
+
+      const t = titleNorm || jsonLdNameNorm;
+      if (!t) return '';
+
+      // remove brand + year to get something resembling model
+      const yearInTitle = (t.match(/\b(19|20)\d{2}\b/) || [])[0] || '';
+      let rest = t;
+      if (brand) {
+        const re = new RegExp(`^\\s*${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`, 'i');
+        rest = rest.replace(re, '');
+      }
+      if (yearInTitle) rest = rest.replace(new RegExp(`\\b${yearInTitle}\\b`), '');
+      rest = normalizeSpaces(rest);
+      return rest;
+    })();
 
     const mileage = extracted.rawKm
       ? parseInt(extracted.rawKm.replace(/[^\d]/g, ''), 10) || 0
@@ -354,12 +440,23 @@ export class HoogSelectionsParserService extends BaseParserService {
       return m ? parseInt(m[0], 10) : 0;
     })();
 
-    const yearFromTitle = (() => {
-      const m = (extracted.title || '').match(/\b(19|20)\d{2}\b/);
+    const yearFromSpecs = (() => {
+      const m = (extracted.rawYear || '').match(/\b(19|20)\d{2}\b/);
       return m ? parseInt(m[0], 10) : 0;
     })();
 
-    const year = yearFromDate || yearFromTitle || 0;
+    const yearFromTitle = (() => {
+      const m = (titleNorm || jsonLdNameNorm).match(/\b(19|20)\d{2}\b/);
+      return m ? parseInt(m[0], 10) : 0;
+    })();
+
+    const yearFromDescription = (() => {
+      const m = (extracted.description || '').match(/\b(19|20)\d{2}\b/);
+      return m ? parseInt(m[0], 10) : 0;
+    })();
+
+    const year =
+      yearFromDate || yearFromSpecs || yearFromTitle || yearFromDescription || 0;
 
     const transmission = (() => {
       const t = (extracted.rawTransmission || '').toLowerCase();

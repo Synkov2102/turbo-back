@@ -7,7 +7,6 @@ import { Car, CarDocument } from '../schemas/car.schema';
 import {
   CRON_VK_GROUPS,
   CRON_FULL_PARSE_CYCLE,
-  CRON_HOOGSELECTIONS,
 } from '../constants/cron.constants';
 import { OldtimerfarmParserService } from './oldtimerfarm-parser.service';
 import { RmsothebysParserService } from './rmsothebys-parser.service';
@@ -66,28 +65,6 @@ export class CronParserService {
     } catch (error) {
       this.logger.error(
         `Ошибка при выполнении полного цикла парсинга: ${(error as Error).message}`,
-      );
-    }
-  }
-
-  /**
-   * Cron job для парсинга HooG Selections (In showroom)
-   */
-  @Cron(CRON_HOOGSELECTIONS)
-  async parseHoogSelectionsCron() {
-    if (this.isRunning) {
-      this.logger.warn('Парсинг уже выполняется, пропускаем запуск cron job');
-      return;
-    }
-
-    this.logger.log(
-      'Запуск cron job для парсинга HooG Selections (In showroom)',
-    );
-    try {
-      await this.parseHoogSelections();
-    } catch (error) {
-      this.logger.error(
-        `Ошибка при парсинге HooG Selections: ${(error as Error).message}`,
       );
     }
   }
@@ -577,6 +554,7 @@ export class CronParserService {
 
     try {
       await this.parseOldtimerfarm();
+      await this.parseHoogSelections();
       await this.parseRmsothebys();
 
       this.logger.log('Запуск обновления цен в рублях');
