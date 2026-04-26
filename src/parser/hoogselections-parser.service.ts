@@ -130,7 +130,7 @@ export class HoogSelectionsParserService extends BaseParserService {
         .map((s) => s.textContent || '')
         .filter(Boolean);
 
-      const safeJsonParse = (raw: string): unknown | null => {
+      const safeJsonParse = (raw: string): unknown => {
         try {
           return JSON.parse(raw) as unknown;
         } catch {
@@ -190,7 +190,9 @@ export class HoogSelectionsParserService extends BaseParserService {
           const obj = v as Record<string, unknown>;
           const t = obj['@type'];
           const types = Array.isArray(t) ? t : t ? [t] : [];
-          if (types.some((x) => String(x).toLowerCase() === 'product')) return obj;
+          if (types.some((x) => String(x).toLowerCase() === 'product')) {
+            return obj;
+          }
           // some pages use @graph
           if (obj['@graph']) return pickProduct(obj['@graph']);
           return null;
@@ -317,8 +319,8 @@ export class HoogSelectionsParserService extends BaseParserService {
       // 2) otherwise pick the longest reasonable content block among several candidates
       const storyFromHeaders = (() => {
         const headings = Array.from(
-          document.querySelectorAll('h1,h2,h3'),
-        ) as HTMLElement[];
+          document.querySelectorAll<HTMLElement>('h1,h2,h3'),
+        );
         const start = headings.find((h) =>
           safeInnerText(h).toLowerCase().includes('bent u van plan'),
         );
@@ -361,17 +363,17 @@ export class HoogSelectionsParserService extends BaseParserService {
       })();
 
       // Prefer the extracted story if it looks real; else use bestCandidate.
-      const description = (storyFromHeaders && storyFromHeaders.length >= 200
-        ? storyFromHeaders
-        : bestCandidate
+      const description = (
+        storyFromHeaders && storyFromHeaders.length >= 200
+          ? storyFromHeaders
+          : bestCandidate
       ).trim();
 
       const rawKm = specs['km stand'] || '';
       const rawDate = specs['datum eerste toelating'] || '';
       const rawBrand = specs['merk'] || '';
       const rawModel = specs['model'] || '';
-      const rawYear =
-        specs['bouwjaar'] || specs['jaar'] || specs['year'] || '';
+      const rawYear = specs['bouwjaar'] || specs['jaar'] || specs['year'] || '';
       const rawTransmission = specs['transmissie'] || '';
 
       return {
@@ -392,13 +394,15 @@ export class HoogSelectionsParserService extends BaseParserService {
       };
     }, url);
 
-    const normalizeSpaces = (s: string) => (s || '').replace(/\s+/g, ' ').trim();
+    const normalizeSpaces = (s: string) =>
+      (s || '').replace(/\s+/g, ' ').trim();
 
     const titleNorm = normalizeSpaces(extracted.title || '');
     const jsonLdNameNorm = normalizeSpaces(extracted.jsonLdName || '');
 
     const brand = (() => {
-      const candidate = normalizeSpaces(extracted.rawBrand || '') ||
+      const candidate =
+        normalizeSpaces(extracted.rawBrand || '') ||
         normalizeSpaces(extracted.jsonLdBrand || '');
       if (candidate) return candidate;
 
@@ -407,8 +411,9 @@ export class HoogSelectionsParserService extends BaseParserService {
       if (!t) return '';
       // take up to first 2 words before a digit year/trim
       const m =
-        t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:[ -][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)?)(?=\s)/) ||
-        t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+)$/);
+        t.match(
+          /^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:[ -][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)?)(?=\s)/,
+        ) || t.match(/^([A-Za-zÀ-ÖØ-öø-ÿ0-9]+)$/);
       return m ? m[1].trim() : '';
     })();
 
@@ -423,10 +428,15 @@ export class HoogSelectionsParserService extends BaseParserService {
       const yearInTitle = (t.match(/\b(19|20)\d{2}\b/) || [])[0] || '';
       let rest = t;
       if (brand) {
-        const re = new RegExp(`^\\s*${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`, 'i');
+        const re = new RegExp(
+          `^\\s*${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`,
+          'i',
+        );
         rest = rest.replace(re, '');
       }
-      if (yearInTitle) rest = rest.replace(new RegExp(`\\b${yearInTitle}\\b`), '');
+      if (yearInTitle) {
+        rest = rest.replace(new RegExp(`\\b${yearInTitle}\\b`), '');
+      }
       rest = normalizeSpaces(rest);
       return rest;
     })();
@@ -456,7 +466,11 @@ export class HoogSelectionsParserService extends BaseParserService {
     })();
 
     const year =
-      yearFromDate || yearFromSpecs || yearFromTitle || yearFromDescription || 0;
+      yearFromDate ||
+      yearFromSpecs ||
+      yearFromTitle ||
+      yearFromDescription ||
+      0;
 
     const transmission = (() => {
       const t = (extracted.rawTransmission || '').toLowerCase();
@@ -467,11 +481,18 @@ export class HoogSelectionsParserService extends BaseParserService {
 
     const priceEur = (() => {
       const s = extracted.joinedPrices || '';
-      const eurMatch =
-        s.match(/€\s*([\d.\s]+),(\d{2})/) || s.match(/€\s*([\d.\s]+)/);
-      if (!eurMatch) return 0;
-      const numeric = eurMatch[1].replace(/[^\d]/g, '');
-      return numeric ? parseInt(numeric, 10) || 0 : 0;
+      const prices: number[] = [];
+      const re = /€\s*([0-9][0-9.\s]*)(?:,(\d{2}))?/g;
+      for (const m of s.matchAll(re)) {
+        const intPartRaw = (m[1] || '').trim();
+        const intPart = intPartRaw.replace(/[^\d]/g, '');
+        if (!intPart) continue;
+        const eur = parseInt(intPart, 10);
+        if (Number.isFinite(eur) && eur > 0) prices.push(eur);
+      }
+
+      if (prices.length === 0) return 0;
+      return Math.max(...prices);
     })();
 
     const status: 'active' | 'sold' = extracted.isSold ? 'sold' : 'active';

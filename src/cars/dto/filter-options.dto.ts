@@ -1,5 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+class CityOptionDto {
+  @ApiProperty({
+    description: 'Город',
+    example: 'Москва',
+  })
+  city: string;
+
+  @ApiProperty({
+    description: 'Страна',
+    example: 'Россия',
+  })
+  country: string;
+}
+
 export class FilterOptionsDto {
   @ApiProperty({
     description: 'Список уникальных брендов',
@@ -9,11 +23,14 @@ export class FilterOptionsDto {
   brands: string[];
 
   @ApiProperty({
-    description: 'Список уникальных городов',
-    type: [String],
-    example: ['Москва', 'Санкт-Петербург'],
+    description: 'Список уникальных городов со странами',
+    type: [CityOptionDto],
+    example: [
+      { city: 'Москва', country: 'Россия' },
+      { city: 'Санкт-Петербург', country: 'Россия' },
+    ],
   })
-  cities: string[];
+  cities: CityOptionDto[];
 
   @ApiProperty({
     description: 'Список уникальных типов трансмиссий',

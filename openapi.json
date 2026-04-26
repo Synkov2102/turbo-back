@@ -1364,6 +1364,25 @@
           "meta"
         ]
       },
+      "CityOptionDto": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "Город",
+            "example": "Москва"
+          },
+          "country": {
+            "type": "string",
+            "description": "Страна",
+            "example": "Россия"
+          }
+        },
+        "required": [
+          "city",
+          "country"
+        ]
+      },
       "FilterOptionsDto": {
         "type": "object",
         "properties": {
@@ -1380,14 +1399,20 @@
             }
           },
           "cities": {
-            "description": "Список уникальных городов",
+            "description": "Список уникальных городов со странами",
             "example": [
-              "Москва",
-              "Санкт-Петербург"
+              {
+                "city": "Москва",
+                "country": "Россия"
+              },
+              {
+                "city": "Санкт-Петербург",
+                "country": "Россия"
+              }
             ],
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/CityOptionDto"
             }
           },
           "transmissions": {

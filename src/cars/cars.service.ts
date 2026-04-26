@@ -189,9 +189,20 @@ export class CarsService {
                   $exists: true,
                   $nin: [null, ''],
                 },
+                'location.country': {
+                  $exists: true,
+                  $nin: [null, ''],
+                },
               },
             },
-            { $group: { _id: '$location.city' } },
+            {
+              $group: {
+                _id: {
+                  city: '$location.city',
+                  country: '$location.country',
+                },
+              },
+            },
           ],
           transmissions: [
             {
@@ -307,7 +318,7 @@ export class CarsService {
 
     const result = aggregationResult[0] as {
       brands: Array<{ _id: string }>;
-      cities: Array<{ _id: string }>;
+      cities: Array<{ _id: { city: string; country: string } }>;
       transmissions: Array<{ _id: string }>;
       models: Array<{ _id: string }>;
       yearRange: Array<{ minYear: number; maxYear: number }>;
@@ -357,8 +368,11 @@ export class CarsService {
         .sort(),
       cities: result.cities
         .map((c) => c._id)
-        .filter(Boolean)
-        .sort(),
+        .filter((c) => !!c?.city && !!c?.country)
+        .sort(
+          (a, b) =>
+            a.country.localeCompare(b.country) || a.city.localeCompare(b.city),
+        ),
       transmissions: result.transmissions
         .map((t) => t._id)
         .filter(Boolean)

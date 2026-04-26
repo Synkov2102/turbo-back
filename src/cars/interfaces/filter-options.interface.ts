@@ -6,8 +6,11 @@ export interface FilterOptions {
   /** Список уникальных брендов */
   brands: string[];
 
-  /** Список уникальных городов */
-  cities: string[];
+  /** Список уникальных городов со странами */
+  cities: Array<{
+    city: string;
+    country: string;
+  }>;
 
   /** Список уникальных типов трансмиссий */
   transmissions: string[];
