@@ -105,9 +105,70 @@ export class HoogSelectionsParserService extends BaseParserService {
     page: Page,
     url: string,
   ): Promise<Partial<Car>> {
-    const extracted = await page.evaluate((pageUrl: string) => {
+    type Extracted = {
+      title: string;
+      url: string;
+      rawBrand: string;
+      rawModel: string;
+      rawKm: string;
+      rawDate: string;
+      rawYear: string;
+      rawTransmission: string;
+      joinedPrices: string;
+      images: string[];
+      description: string;
+      isSold: boolean;
+      jsonLdBrand: string;
+      jsonLdName: string;
+      jsonLdPrice: number | null;
+      jsonLdCurrency: string;
+    };
+
+    const extracted = (await page.evaluate((pageUrl: string) => {
       const getText = (el: Element | null | undefined) =>
         (el?.textContent || '').replace(/\s+/g, ' ').trim();
+
+      const parseEuroNumber = (raw: string): number | null => {
+        if (!raw) return null;
+        const s = raw
+          .trim()
+          .replace(/\u00a0/g, ' ') // nbsp
+          .replace(/[^\d.,\s]/g, '')
+          .replace(/\s+/g, '');
+        if (!s) return null;
+
+        const hasDot = s.includes('.');
+        const hasComma = s.includes(',');
+
+        // Common EU format: 84.950,00 -> 84950.00
+        if (hasDot && hasComma) {
+          const normalized = s.replace(/\./g, '').replace(',', '.');
+          const n = parseFloat(normalized);
+          return Number.isFinite(n) ? n : null;
+        }
+
+        // If only comma exists, it's usually decimal separator.
+        if (!hasDot && hasComma) {
+          const normalized = s.replace(',', '.');
+          const n = parseFloat(normalized);
+          return Number.isFinite(n) ? n : null;
+        }
+
+        // If only dot exists, decide whether dot is thousands separator.
+        // Treat as thousands when dot is followed by exactly 3 digits at the end or before another separator.
+        if (hasDot && !hasComma) {
+          if (/\.\d{3}(\.|$)/.test(s) || /\.\d{3}$/.test(s)) {
+            const normalized = s.replace(/\./g, '');
+            const n = parseFloat(normalized);
+            return Number.isFinite(n) ? n : null;
+          }
+          const n = parseFloat(s);
+          return Number.isFinite(n) ? n : null;
+        }
+
+        const n = parseFloat(s);
+        return Number.isFinite(n) ? n : null;
+      };
 
       const title =
         getText(document.querySelector('h1')) ||
@@ -169,6 +230,8 @@ export class HoogSelectionsParserService extends BaseParserService {
       let availability: 'InStock' | 'OutOfStock' | null = null;
       let jsonLdBrand = '';
       let jsonLdName = '';
+      let jsonLdPrice: number | null = null;
+      let jsonLdCurrency = '';
       for (const raw of ldJsonScripts) {
         const parsed = safeJsonParse(raw);
         if (!parsed) continue;
@@ -211,6 +274,47 @@ export class HoogSelectionsParserService extends BaseParserService {
               if (typeof bn === 'string') jsonLdBrand = bn.trim();
             }
           }
+
+          // price: prefer Product.offers.price / priceCurrency from JSON-LD when available
+          if (jsonLdPrice == null) {
+            const offers = product.offers ?? product.offer;
+            const pickOffer = (v: unknown): Record<string, unknown> | null => {
+              if (!v) return null;
+              if (Array.isArray(v)) {
+                for (const item of v) {
+                  const o = pickOffer(item);
+                  if (o) return o;
+                }
+                return null;
+              }
+              if (typeof v !== 'object') return null;
+              return v as Record<string, unknown>;
+            };
+            const offer = pickOffer(offers);
+            if (offer) {
+              const cur = offer.priceCurrency;
+              if (!jsonLdCurrency && typeof cur === 'string') {
+                jsonLdCurrency = cur.trim();
+              }
+
+              const rawPrice = offer.price;
+              const toNumber = (x: unknown): number | null => {
+                if (typeof x === 'number' && Number.isFinite(x)) return x;
+                if (typeof x === 'string') {
+                  const cleaned = x
+                    .trim()
+                    .replace(/[^\d.,]/g, '')
+                    .replace(/\.(?=\d{3}\b)/g, '') // remove thousand separators like "12.345"
+                    .replace(',', '.');
+                  const n = parseFloat(cleaned);
+                  return Number.isFinite(n) ? n : null;
+                }
+                return null;
+              };
+              const p = toNumber(rawPrice);
+              if (p != null && p > 0) jsonLdPrice = p;
+            }
+          }
         }
       }
 
@@ -221,14 +325,29 @@ export class HoogSelectionsParserService extends BaseParserService {
             ? true
             : false;
 
-      // price
+      // price (DOM fallback). Keep selectors narrow to avoid picking unrelated "price" blocks.
       const priceNodes = Array.from(
         document.querySelectorAll(
-          '.summary .price, .product .price, .woocommerce-Price-amount, [class*="price"]',
+          '.summary .price, .product .price, .woocommerce-Price-amount, meta[itemprop="price"], [itemprop="price"]',
         ),
       );
-      const priceTexts = priceNodes.map((n) => getText(n)).filter(Boolean);
+      const priceTexts = priceNodes
+        .map((n) => {
+          if (n instanceof HTMLMetaElement) return (n.content || '').trim();
+          const attr =
+            (n as HTMLElement).getAttribute?.('content') ||
+            (n as HTMLElement).getAttribute?.('value') ||
+            '';
+          return (attr || getText(n)).trim();
+        })
+        .filter(Boolean);
       const joinedPrices = priceTexts.join(' | ');
+      const domPriceCandidates = priceTexts
+        .map(parseEuroNumber)
+        .filter((x): x is number => typeof x === 'number' && x > 0);
+      const domPrice = domPriceCandidates.length
+        ? Math.max(...domPriceCandidates)
+        : null;
 
       // key/value specs (labels on page)
       // Page uses repeating blocks like: <div>Merk</div><div>Mercedes-Benz</div> (or similar)
@@ -386,13 +505,16 @@ export class HoogSelectionsParserService extends BaseParserService {
         rawYear,
         rawTransmission,
         joinedPrices,
+        domPrice,
         images,
         description,
         isSold,
         jsonLdBrand,
         jsonLdName,
+        jsonLdPrice,
+        jsonLdCurrency,
       };
-    }, url);
+    }, url)) as Extracted;
 
     const normalizeSpaces = (s: string) =>
       (s || '').replace(/\s+/g, ' ').trim();
@@ -480,6 +602,34 @@ export class HoogSelectionsParserService extends BaseParserService {
     })();
 
     const priceEur = (() => {
+      // Prefer JSON-LD price if available and currency looks like EUR.
+      if (
+        typeof extracted.jsonLdPrice === 'number' &&
+        Number.isFinite(extracted.jsonLdPrice) &&
+        extracted.jsonLdPrice > 0
+      ) {
+        const cur = normalizeSpaces(
+          extracted.jsonLdCurrency || '',
+        ).toUpperCase();
+        // if currency absent, still accept (many pages omit it); if present, require EUR.
+        if (!cur || cur === 'EUR') {
+          return Math.round(extracted.jsonLdPrice);
+        }
+      }
+
+      if (
+        typeof (extracted as unknown as { domPrice?: number | null })
+          .domPrice === 'number' &&
+        Number.isFinite(
+          (extracted as unknown as { domPrice: number }).domPrice,
+        ) &&
+        (extracted as unknown as { domPrice: number }).domPrice > 0
+      ) {
+        return Math.round(
+          (extracted as unknown as { domPrice: number }).domPrice,
+        );
+      }
+
       const s = extracted.joinedPrices || '';
       const prices: number[] = [];
       const re = /€\s*([0-9][0-9.\s]*)(?:,(\d{2}))?/g;
