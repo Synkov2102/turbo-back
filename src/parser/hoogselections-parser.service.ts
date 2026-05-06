@@ -304,7 +304,7 @@ export class HoogSelectionsParserService extends BaseParserService {
                   const cleaned = x
                     .trim()
                     .replace(/[^\d.,]/g, '')
-                    .replace(/\.(?=\d{3}\b)/g, '') // remove thousand separators like "12.345"
+                    .replace(/\./g, '') // remove dots in price strings like "84.950"
                     .replace(',', '.');
                   const n = parseFloat(cleaned);
                   return Number.isFinite(n) ? n : null;
